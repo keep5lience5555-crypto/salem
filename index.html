@@ -172,6 +172,18 @@ const CARD_DEFS = {
     { type: 'witness', name: '目擊', value: 7, count: 1, desc: '對目標 +7 點審判點，單張就直接觸發審判（信徒無法被直接指控）' },
   ],
 };
+// ── 城鎮特殊角色（進階模式，暗身分，每場每個角色最多1張）──────────────────────
+const CHARACTER_DEFS = {
+  beggar: { name: '乞丐', desc: '搶劫和縱火對自己無效，被打出時立刻作廢丟棄' },
+  maid: { name: '女僕', desc: '黑貓和情侶對自己無效，無法被選為這兩張卡的目標' },
+  strongman: { name: '大力士', desc: '需要累計8點指控才會觸發審判（一般是7點）' },
+  minister: { name: '部長', desc: '別人對自己打出的「證據」卡只計1點指控（原本是3點）' },
+  farmer: { name: '農民', desc: '任何玩家死亡時，農民獲得死者的所有手牌和裝備(藍卡)' },
+  housewife: { name: '家庭主婦', desc: '場上每有一張身份卡因審判或黑貓傳染而被翻開時，獲得1張牌（死亡直接翻牌、自首翻牌不算）' },
+  judge: { name: '法官', desc: '自己打出的指控牌讓目標剛好達到6點指控時，可以選擇直接送審（不用等到7點）' },
+  doctor: { name: '醫生', desc: '可以選擇把「辯護」卡當「目擊」使用（value 7，對目標+7點指控），而不是原本的辯護效果' },
+  landlord: { name: '地主', desc: '抽兩張牌時如果剛好抽到2張紅色指控卡，展示後可以再多抽1張' },
+};
 const IDENTITY_LABEL = { witch: '女巫', sheriff: '警長', villager: '村民' };
 const IDENTITY_CLASS = { witch: 'witch', sheriff: 'sheriff', villager: 'villager' };
 const IDENTITY_IMG = { witch: 'assets/witch.jpg', sheriff: 'assets/sheriff.jpg', villager: 'assets/villager.jpg' };
@@ -203,6 +215,8 @@ function normalize(data) {
   data.log = data.log || [];
   data.deck = data.deck || [];
   data.discard = data.discard || [];
+  data.mode = data.mode || 'basic';
+  data.enabledRoles = data.enabledRoles || [];
   if (data.players) {
     for (const pid of Object.keys(data.players)) {
       const p = data.players[pid];
@@ -213,6 +227,7 @@ function normalize(data) {
       p.accusationTotal = p.accusationTotal || 0;
       p.skipTurns = p.skipTurns || 0;
       p.isWitchFaction = !!p.isWitchFaction;
+      p.characterRole = p.characterRole || null;
     }
   }
   data.turnHasPlayed = !!data.turnHasPlayed;
@@ -249,6 +264,7 @@ let lastRoomData = null;
 let selectedCardId = null;   // 目前選取準備出的手牌 id
 let selectedTargets = [];    // 出牌時已選的目標 pid 陣列
 let selectedSubTarget = null; // 詛咒用：選擇要丟棄目標的哪一張裝備 id
+let playAsWitness = false;    // 醫生用：把辯護卡當目擊使用
 let unsub = null;
 let nightResolving = false;  // 避免 host 重複觸發夜晚結算
 
@@ -289,7 +305,9 @@ async function createRoom() {
     state: 'lobby',
     hostPid: MY_PID,
     turnOrder: [MY_PID],
-    players: { [MY_PID]: { name: MY_NAME, alive: true, identityCards: [], hand: [], equipment: [], accusationTotal: 0, accusationCards: [], skipTurns: 0, loverWith: null } },
+    mode: 'basic',
+    enabledRoles: [],
+    players: { [MY_PID]: { name: MY_NAME, alive: true, identityCards: [], hand: [], equipment: [], accusationTotal: 0, accusationCards: [], skipTurns: 0, loverWith: null, characterRole: null } },
     log: ['房間建立'],
   };
   await set(roomRef(code), data);
@@ -308,7 +326,7 @@ async function joinRoom(codeRaw) {
   MY_NAME = nm; sessionStorage.setItem('salem_name', MY_NAME);
   if (!data.players[MY_PID]) {
     if (Object.keys(data.players).length >= 12) return alert('房間已滿(12人)');
-    await update(ref(db, `${ROOT}/${code}/players/${MY_PID}`), { name: MY_NAME, alive: true, identityCards: [], hand: [], equipment: [], accusationTotal: 0, accusationCards: [], skipTurns: 0, loverWith: null });
+    await update(ref(db, `${ROOT}/${code}/players/${MY_PID}`), { name: MY_NAME, alive: true, identityCards: [], hand: [], equipment: [], accusationTotal: 0, accusationCards: [], skipTurns: 0, loverWith: null, characterRole: null });
     await set(ref(db, `${ROOT}/${code}/turnOrder`), [...data.turnOrder, MY_PID]);
   }
   ROOM_CODE = code; sessionStorage.setItem('salem_room', code);
@@ -345,6 +363,15 @@ async function startGame() {
     data.players[pid].identityCards = cards;
     data.players[pid].isWitchFaction = cards.some(c => c.type === 'witch');
     cursor += perPlayer;
+    data.players[pid].characterRole = null;
+  }
+
+  if (data.mode === 'advanced' && data.enabledRoles && data.enabledRoles.length > 0) {
+    const roleDeck = shuffle(data.enabledRoles);
+    order.forEach((pid, i) => {
+      if (i < roleDeck.length) data.players[pid].characterRole = { type: roleDeck[i], usesLeft: null };
+    });
+    logPush(data, `🎭 進階模式：已發放 ${Math.min(order.length, roleDeck.length)} 個特殊角色`);
   }
 
   let gameDeck = buildGameDeck();
@@ -396,16 +423,19 @@ function maybeResolveBlackcatPick(data) {
 async function returnToLobby() {
   const data = clone(lastRoomData);
   for (const pid of data.turnOrder) {
-    data.players[pid] = { name: data.players[pid].name, alive: true, identityCards: [], hand: [], equipment: [], accusationTotal: 0, accusationCards: [], skipTurns: 0, loverWith: null, isWitchFaction: false };
+    data.players[pid] = { name: data.players[pid].name, alive: true, identityCards: [], hand: [], equipment: [], accusationTotal: 0, accusationCards: [], skipTurns: 0, loverWith: null, isWitchFaction: false, characterRole: null };
   }
   data.state = 'lobby';
   data.log = ['回到大廳'];
   delete data.deck; delete data.discard; delete data.currentTurn; delete data.winner; delete data.night; delete data.reveal;
   delete data.pendingNextTurnFrom; delete data.pendingBlackcat; delete data.blackcatPick; delete data.contagionPicks;
+  delete data.twoPlayerBluePurged;
   await set(roomRef(ROOM_CODE), data);
 }
 
 // ── 玩家/身份 輔助判斷 ────────────────────────────────────────────────────────
+function hasRole(p, type) { return !!(p.characterRole && p.characterRole.type === type); }
+function trialThreshold(target) { return hasRole(target, 'strongman') ? 8 : 7; }
 function isWitchTeam(p) { return !!p.isWitchFaction; }
 function isActiveWitch(p) { return p.alive && !!p.isWitchFaction; }
 function isActiveSheriff(p) { return p.alive && p.identityCards.some(c => c.type === 'sheriff' && !c.revealed); }
@@ -450,8 +480,17 @@ function applyDeath(data, pid) {
   const p = data.players[pid];
   if (!p.alive) return;
   p.alive = false;
-  data.discard.push(...p.hand); p.hand = [];
-  data.discard.push(...p.equipment);
+  const farmerPid = data.turnOrder.find(x => x !== pid && data.players[x].alive && hasRole(data.players[x], 'farmer'));
+  if (farmerPid) {
+    const farmer = data.players[farmerPid];
+    farmer.hand.push(...p.hand);
+    farmer.equipment.push(...p.equipment);
+    if (p.hand.length || p.equipment.length) logPush(data, `🌾 ${farmer.name}（農民）獲得了 ${p.name} 的所有手牌和裝備`);
+  } else {
+    data.discard.push(...p.hand);
+    data.discard.push(...p.equipment);
+  }
+  p.hand = [];
   p.equipment = [];
   p.identityCards.forEach(c => c.revealed = true);
   logPush(data, `☠ ${p.name} 死亡，身份公開：${p.identityCards.map(c => IDENTITY_LABEL[c.type]).join('、')}`);
@@ -498,8 +537,11 @@ async function drawTwo() {
   const data = clone(lastRoomData);
   if (data.state !== 'day' || data.currentTurn !== MY_PID) return;
   if (data.turnHasPlayed) return alert('這回合已經出過牌，這回合不能再抽牌');
+  const isLandlord = hasRole(data.players[MY_PID], 'landlord');
+  let target = 2;
   let drawn = 0;
-  while (drawn < 2) {
+  const drawnCards = [];
+  while (drawn < target) {
     reshuffleIfNeeded(data, 1);
     if (data.deck.length === 0) break;
     const card = data.deck.shift();
@@ -509,10 +551,15 @@ async function drawTwo() {
       if (data.state !== 'day') break; // 轉入夜晚/傳染，這次抽牌到此為止，不會憑空遺失第二張牌
     } else {
       data.players[MY_PID].hand.push(card);
+      drawnCards.push(card);
+      if (isLandlord && target === 2 && drawnCards.length === 2 && drawnCards.every(c => c.color === 'red')) {
+        target = 3;
+        logPush(data, `🏚 ${data.players[MY_PID].name}（地主）連抽2張指控牌，額外再多抽1張`);
+      }
     }
   }
   if (data.state === 'day') {
-    logPush(data, `${data.players[MY_PID].name} 抽了兩張牌`);
+    logPush(data, `${data.players[MY_PID].name} 抽了${drawnCards.length}張牌`);
     data.currentTurn = nextAlivePid(data, MY_PID);
     data.turnHasPlayed = false;
   }
@@ -597,7 +644,7 @@ async function resolveContagionTransfer(data) {
   await set(roomRef(ROOM_CODE), data);
 }
 
-async function playCard(cardId, targets, subTarget) {
+async function playCard(cardId, targets, subTarget, asWitness) {
   const data = clone(lastRoomData);
   if (data.state !== 'day' || data.currentTurn !== MY_PID) return;
   const me = data.players[MY_PID];
@@ -605,27 +652,37 @@ async function playCard(cardId, targets, subTarget) {
   if (idx < 0) return;
   const card = me.hand[idx];
   const target = targets[0] ? data.players[targets[0]] : null;
+  if (asWitness && !(card.type === 'defend' && hasRole(me, 'doctor'))) asWitness = false;
 
   // 所有紅/綠/藍卡都不能對自己產生效果
   if (targets.includes(MY_PID)) return alert('這張卡不能對自己使用');
-  if (card.color === 'red' && target && target.equipment.some(e => e.type === 'believer')) return alert(`${target.name} 是信徒，無法直接被指控`);
+  if ((card.color === 'red' || asWitness) && target && target.equipment.some(e => e.type === 'believer')) return alert(`${target.name} 是信徒，無法直接被指控`);
   if ((card.color === 'red' || card.color === 'green' || card.color === 'blue') && !target) return alert('請選擇目標');
   if (card.type === 'rob' && alivePids(data).length <= 2) return alert('只剩兩人時，搶劫無法使用');
   if (card.type === 'frame' && alivePids(data).length <= 2) return alert('只剩兩人時，嫁禍無法使用');
   if (card.type === 'curse' && target.equipment.length === 0) return alert(`${target.name} 沒有裝備(藍卡)，無法詛咒`);
+  if ((card.type === 'lovers' || card.type === 'blackcat') && targets.some(t => hasRole(data.players[t], 'maid'))) return alert('女僕無法成為黑貓或情侶的目標');
 
   me.hand.splice(idx, 1);
 
-  if (card.color === 'red') {
-    target.accusationCards.push({ cardId: card.id, value: card.value, byPid: MY_PID });
-    target.accusationTotal += card.value;
-    logPush(data, `${me.name} 對 ${target.name} 打出「${card.name}」（+${card.value}，累計 ${target.accusationTotal}）`);
+  if (card.color === 'red' || asWitness) {
+    const value = asWitness ? 7 : (card.type === 'evidence' && hasRole(target, 'minister') ? 1 : card.value);
+    const cardName = asWitness ? '目擊(辯護代用)' : card.name;
+    target.accusationCards.push({ cardId: card.id, value, byPid: MY_PID });
+    target.accusationTotal += value;
+    logPush(data, `${me.name} 對 ${target.name} 打出「${cardName}」（+${value}，累計 ${target.accusationTotal}）`);
     data.discard.push(card);
-    if (target.accusationTotal >= 7) {
+    const threshold = trialThreshold(target);
+    let triggerTrial = target.accusationTotal >= threshold;
+    if (!triggerTrial && hasRole(me, 'judge') && threshold === 7 && target.accusationTotal === 6) {
+      triggerTrial = confirm(`⚖ 法官能力：${target.name} 指控已達6點，要直接送審嗎？`);
+      if (triggerTrial) logPush(data, `⚖ 法官 ${me.name} 動用能力，提前送審`);
+    }
+    if (triggerTrial) {
       data.pendingNextTurnFrom = MY_PID;
       data.state = 'awaiting_reveal';
       data.reveal = { targetPid: targets[0], cause: 'trial', triggeredByPid: MY_PID };
-      logPush(data, `⚖ ${target.name} 指控達到7點，被 ${me.name} 送上審判台！`);
+      logPush(data, `⚖ ${target.name} 被 ${me.name} 送上審判台！`);
     }
   } else {
     switch (card.type) {
@@ -660,16 +717,24 @@ async function playCard(cardId, targets, subTarget) {
         const t1 = targets[0], t2 = targets[1]; // t1: 手牌被拿走者, t2: 接收者
         if (!t1 || !t2 || t1 === t2) { me.hand.splice(idx, 0, card); return alert('搶劫需要選擇兩位不同的玩家'); }
         const src = data.players[t1], dst = data.players[t2];
-        dst.hand.push(...src.hand);
-        src.hand = [];
-        logPush(data, `${me.name} 用搶劫把 ${src.name} 的所有手牌交給了 ${dst.name}`);
+        if (hasRole(src, 'beggar')) {
+          logPush(data, `🥖 ${src.name}（乞丐）對搶劫免疫，卡片直接作廢`);
+        } else {
+          dst.hand.push(...src.hand);
+          src.hand = [];
+          logPush(data, `${me.name} 用搶劫把 ${src.name} 的所有手牌交給了 ${dst.name}`);
+        }
         data.discard.push(card);
         break;
       }
       case 'arson': {
-        data.discard.push(...target.hand);
-        target.hand = [];
-        logPush(data, `${me.name} 縱火燒毀了 ${target.name} 的所有手牌`);
+        if (hasRole(target, 'beggar')) {
+          logPush(data, `🥖 ${target.name}（乞丐）對縱火免疫，卡片直接作廢`);
+        } else {
+          data.discard.push(...target.hand);
+          target.hand = [];
+          logPush(data, `${me.name} 縱火燒毀了 ${target.name} 的所有手牌`);
+        }
         data.discard.push(card);
         break;
       }
@@ -733,7 +798,7 @@ async function playCard(cardId, targets, subTarget) {
   const winner = checkWin(data);
   if (winner) { data.state = 'end'; data.winner = winner; }
   await set(roomRef(ROOM_CODE), data);
-  selectedCardId = null; selectedTargets = []; selectedSubTarget = null;
+  selectedCardId = null; selectedTargets = []; selectedSubTarget = null; playAsWitness = false;
 }
 
 // ── 夜晚 ──────────────────────────────────────────────────────────────────────
@@ -847,6 +912,16 @@ async function resolveReveal(cardIndex) {
   const ok = forceReveal(data, targetPid, cardIndex);
   if (!ok) return;
   if (cause === 'trial') { target.accusationTotal = 0; target.accusationCards = []; }
+  if (cause === 'trial' || cause === 'blackcat') {
+    const housewifePid = data.turnOrder.find(pid => data.players[pid].alive && hasRole(data.players[pid], 'housewife'));
+    if (housewifePid) {
+      reshuffleIfNeeded(data, 1);
+      if (data.deck.length > 0) {
+        data.players[housewifePid].hand.push(data.deck.shift());
+        logPush(data, `🏠 ${data.players[housewifePid].name}（家庭主婦）因身份卡被翻開而獲得1張牌`);
+      }
+    }
+  }
   stripBlueCardsAtTwoPlayers(data);
   data.reveal = null;
   const winner = checkWin(data);
@@ -896,10 +971,43 @@ function renderHome() {
 }
 
 // ── Render: Lobby ─────────────────────────────────────────────────────────────
+async function setMode(mode) {
+  const updates = { mode };
+  if (mode === 'basic') updates.enabledRoles = [];
+  await update(roomRef(ROOM_CODE), updates);
+}
+async function toggleRole(type) {
+  const cur = new Set(lastRoomData.enabledRoles || []);
+  if (cur.has(type)) cur.delete(type); else cur.add(type);
+  await set(ref(db, `${ROOT}/${ROOM_CODE}/enabledRoles`), [...cur]);
+}
 function renderLobby(data) {
   setBg('lobby');
   const isHost = data.hostPid === MY_PID;
   const n = data.turnOrder.length;
+  const enabledRoles = data.enabledRoles || [];
+  const modeHtml = isHost ? `
+    <div class="card">
+      <h2>遊戲模式</h2>
+      <div class="row">
+        <button class="btn-sm ${data.mode === 'basic' ? 'btn-primary' : 'btn-secondary'}" id="btnModeBasic" style="width:auto">基本模式</button>
+        <button class="btn-sm ${data.mode === 'advanced' ? 'btn-primary' : 'btn-secondary'}" id="btnModeAdvanced" style="width:auto">進階模式</button>
+      </div>
+      ${data.mode === 'advanced' ? `
+        <div class="muted" style="margin:8px 0 4px">勾選要啟用的特殊角色（每個角色一場最多1張，不用選滿）：</div>
+        <div class="row">
+          ${Object.entries(CHARACTER_DEFS).map(([type, def]) => `
+            <span class="target-btn ${enabledRoles.includes(type) ? 'picked' : ''}" data-role="${type}" title="${def.desc}">${def.name}</span>
+          `).join('')}
+        </div>
+      ` : ''}
+    </div>
+  ` : (data.mode === 'advanced' ? `
+    <div class="card">
+      <h2>遊戲模式</h2>
+      <div class="muted">進階模式，已啟用角色：${enabledRoles.length ? enabledRoles.map(t => CHARACTER_DEFS[t].name).join('、') : '（房主尚未選擇）'}</div>
+    </div>
+  ` : '');
   render(`
     <h1>🕯 獵巫鎮</h1>
     <div class="roomcode">${ROOM_CODE}</div>
@@ -908,6 +1016,7 @@ function renderLobby(data) {
       <h2>玩家 (${n}/12)</h2>
       ${data.turnOrder.map(pid => `<div class="player-row"><span class="player-name">${data.players[pid].name}${pid === data.hostPid ? ' 👑' : ''}${pid === MY_PID ? '（你）' : ''}</span></div>`).join('')}
     </div>
+    ${modeHtml}
     ${isHost
       ? `<button class="btn-primary" id="btnStart" ${n < 4 ? 'disabled' : ''}>開始遊戲${n < 4 ? '（至少4人）' : ''}</button>`
       : `<div class="muted center">等待房主開始遊戲...</div>`}
@@ -916,7 +1025,14 @@ function renderLobby(data) {
       <button class="btn-secondary btn-sm" id="btnRules">📖 卡牌說明</button>
     </div>
   `);
-  if (isHost) el('btnStart').onclick = startGame;
+  if (isHost) {
+    el('btnStart').onclick = startGame;
+    el('btnModeBasic').onclick = () => setMode('basic');
+    el('btnModeAdvanced').onclick = () => setMode('advanced');
+    if (data.mode === 'advanced') {
+      el('app').querySelectorAll('[data-role]').forEach(elm => elm.onclick = () => toggleRole(elm.getAttribute('data-role')));
+    }
+  }
   el('btnLeave').onclick = leaveToHome;
   el('btnRules').onclick = toggleRules;
 }
@@ -967,8 +1083,10 @@ function renderDay(data) {
   let needSubTarget = false;
   if (selectedCard) {
     const need = (selectedCard.type === 'lovers' || selectedCard.type === 'frame' || selectedCard.type === 'rob') ? 2 : 1;
-    const candidates = data.turnOrder.filter(pid => data.players[pid].alive && pid !== MY_PID);
+    const excludeMaid = selectedCard.type === 'lovers' || selectedCard.type === 'blackcat';
+    const candidates = data.turnOrder.filter(pid => data.players[pid].alive && pid !== MY_PID && !(excludeMaid && hasRole(data.players[pid], 'maid')));
     const targetsChosen = selectedTargets.length >= need;
+    const canDoctorWitness = selectedCard.type === 'defend' && hasRole(me, 'doctor');
     let subPickerHtml = '';
     if (selectedCard.type === 'curse' && targetsChosen) {
       const curseTarget = data.players[selectedTargets[0]];
@@ -979,10 +1097,14 @@ function renderDay(data) {
       }
     }
     const canConfirm = targetsChosen && !(needSubTarget && !selectedSubTarget);
+    const doctorToggleHtml = canDoctorWitness ? `<div style="width:100%;font-size:0.78rem;color:var(--dim);margin-top:6px">醫生能力：</div>
+      <span class="target-btn ${!playAsWitness ? 'picked' : ''}" data-doctor="false">當一般辯護使用(-3點)</span>
+      <span class="target-btn ${playAsWitness ? 'picked' : ''}" data-doctor="true">當目擊使用(+7點指控)</span>` : '';
     targetPickerHtml = `<div class="target-picker">
       <div style="width:100%;font-size:0.78rem;color:var(--dim)">${selectedCard.desc || '選擇目標'}（需選 ${need} 位，已選 ${selectedTargets.length}）</div>
       ${candidates.map(pid => `<span class="target-btn ${selectedTargets.includes(pid) ? 'picked' : ''}" data-target="${pid}">${data.players[pid].name}</span>`).join('')}
       ${subPickerHtml}
+      ${doctorToggleHtml}
       <button class="btn-primary btn-sm" id="btnConfirmPlay" ${canConfirm ? '' : 'disabled'} style="width:auto">出牌</button>
       <button class="btn-secondary btn-sm" id="btnCancelPlay" style="width:auto">取消</button>
     </div>`;
@@ -1001,6 +1123,7 @@ function renderDay(data) {
       <h3>你的身份卡</h3>
       <div class="row">${myIdentityChips}</div>
       ${witchTeammates.length ? `<div class="muted" style="margin-top:6px">🔮 你的女巫同夥：${witchTeammates.join('、')}</div>` : ''}
+      ${me.characterRole ? `<div class="muted" style="margin-top:6px">🎭 特殊角色：<b>${CHARACTER_DEFS[me.characterRole.type].name}</b> — ${CHARACTER_DEFS[me.characterRole.type].desc}</div>` : ''}
     </div>
     <div class="card">
       <h3>${myTurn ? (data.turnHasPlayed ? '輪到你了！這回合已出過牌，可以繼續出牌或結束回合' : '輪到你了！打牌或抽兩張牌，二選一') : `等待 ${name(data, data.currentTurn)} 的回合...`}</h3>
@@ -1020,10 +1143,10 @@ function renderDay(data) {
   }
   if (myTurn) {
     el('app').querySelectorAll('[data-card]').forEach(elm => {
-      elm.onclick = () => { selectedCardId = elm.getAttribute('data-card'); selectedTargets = []; selectedSubTarget = null; renderDay(lastRoomData); };
+      elm.onclick = () => { selectedCardId = elm.getAttribute('data-card'); selectedTargets = []; selectedSubTarget = null; playAsWitness = false; renderDay(lastRoomData); };
     });
     const cancelBtn = el('btnCancelPlay');
-    if (cancelBtn) cancelBtn.onclick = () => { selectedCardId = null; selectedTargets = []; selectedSubTarget = null; renderDay(lastRoomData); };
+    if (cancelBtn) cancelBtn.onclick = () => { selectedCardId = null; selectedTargets = []; selectedSubTarget = null; playAsWitness = false; renderDay(lastRoomData); };
     el('app').querySelectorAll('[data-target]').forEach(elm => {
       elm.onclick = () => {
         const pid = elm.getAttribute('data-target');
@@ -1037,8 +1160,11 @@ function renderDay(data) {
     el('app').querySelectorAll('[data-subtarget]').forEach(elm => {
       elm.onclick = () => { selectedSubTarget = elm.getAttribute('data-subtarget'); renderDay(lastRoomData); };
     });
+    el('app').querySelectorAll('[data-doctor]').forEach(elm => {
+      elm.onclick = () => { playAsWitness = elm.getAttribute('data-doctor') === 'true'; renderDay(lastRoomData); };
+    });
     const confirmBtn = el('btnConfirmPlay');
-    if (confirmBtn) confirmBtn.onclick = () => playCard(selectedCardId, selectedTargets, selectedSubTarget);
+    if (confirmBtn) confirmBtn.onclick = () => playCard(selectedCardId, selectedTargets, selectedSubTarget, playAsWitness);
   }
 }
 
@@ -1181,8 +1307,9 @@ function renderAssignBlackcat(data) {
   const done = !!data.blackcatPick;
   let body;
   if (canPick) {
+    const bcCandidates = data.turnOrder.filter(pid => !hasRole(data.players[pid], 'maid'));
     body = `<h3>🐈‍⬛ 請選擇一位玩家放置黑貓（他將成為起始玩家）</h3>
-      <div class="target-picker">${data.turnOrder.map(pid => `<span class="target-btn ${data.blackcatPick === pid ? 'picked' : ''}" data-bc="${pid}">${data.players[pid].name}</span>`).join('')}</div>`;
+      <div class="target-picker">${bcCandidates.map(pid => `<span class="target-btn ${data.blackcatPick === pid ? 'picked' : ''}" data-bc="${pid}">${data.players[pid].name}</span>`).join('')}</div>`;
   } else {
     body = `<div class="muted center">🐈‍⬛ 女巫方正在選擇黑貓持有者（起始玩家）...</div>`;
   }
@@ -1192,6 +1319,7 @@ function renderAssignBlackcat(data) {
     <div class="card ${isWitchTeam(me) ? 'witch' : ''}">
       <h3>你的身份卡</h3>
       <div class="row">${me.identityCards.map(c => identityPill(c.type)).join('')}</div>
+      ${me.characterRole ? `<div class="muted" style="margin-top:6px">🎭 特殊角色：<b>${CHARACTER_DEFS[me.characterRole.type].name}</b> — ${CHARACTER_DEFS[me.characterRole.type].desc}</div>` : ''}
     </div>
     <div class="card">${body}${done ? `<div class="muted" style="margin-top:8px">已選擇：${data.players[data.blackcatPick].name}</div>` : ''}</div>
   `);
@@ -1291,11 +1419,22 @@ function renderCardRules() {
       <div class="muted">村民勝利：全場所有女巫身份卡都被翻開（不需要女巫死亡）</div>
       <div class="muted" style="margin-top:4px">女巫勝利：所有非女巫陣營玩家都死亡</div>
     </div>`;
+  const roleSection = `
+    <div class="card">
+      <h3>特殊角色（進階模式）</h3>
+      <div class="muted" style="margin-bottom:6px">房主開局可選擇啟用，每個角色一場最多1張，暗身分只有自己知道</div>
+      ${Object.entries(CHARACTER_DEFS).map(([type, def]) => `
+        <div class="player-row" style="align-items:flex-start">
+          <span style="min-width:78px"><b>${def.name}</b></span>
+          <span class="muted" style="flex:1">${def.desc}</span>
+        </div>`).join('')}
+    </div>`;
   render(`
     <h1>🕯 獵巫鎮</h1>
     <div class="subtitle center">卡牌說明</div>
     ${identitySections}
     ${sections}
+    ${roleSection}
     <button class="btn-primary" id="btnCloseRules">返回</button>
   `);
   el('btnCloseRules').onclick = toggleRules;
