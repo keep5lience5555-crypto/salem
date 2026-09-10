@@ -243,7 +243,7 @@ function normalize(data) {
     data.night.witchProposals = data.night.witchProposals || {};
   }
   if (data.state === 'night_confess') data.nightConfessChoices = data.nightConfessChoices || {};
-  if (data.state === 'assign_blackcat') data.blackcatPick = data.blackcatPick || null;
+  if (data.state === 'assign_blackcat') data.blackcatProposals = data.blackcatProposals || {};
   if (data.state === 'contagion_pick') data.contagionPicks = data.contagionPicks || {};
   return data;
 }
@@ -402,24 +402,36 @@ async function startGame() {
   data.winner = null;
   data.night = null;
   data.reveal = null;
-  data.blackcatPick = null;
+  data.blackcatProposals = {};
   data.pendingNextTurnFrom = null;
   logPush(data, '身份與手牌已發放，請女巫方選擇黑貓持有者（起始玩家）');
 
   await set(roomRef(ROOM_CODE), data);
 }
 
-async function submitBlackcatPick(pid) {
-  await set(ref(db, `${ROOT}/${ROOM_CODE}/blackcatPick`), pid);
+async function submitBlackcatPick(pid, confirmed) {
+  await set(ref(db, `${ROOT}/${ROOM_CODE}/blackcatProposals/${MY_PID}`), { target: pid, confirmed });
+}
+function blackcatConsensusTarget(data) {
+  const activeWitches = data.turnOrder.filter(pid => data.players[pid].alive && isWitchTeam(data.players[pid]));
+  if (activeWitches.length === 0) return { ready: true, target: null };
+  const proposals = data.blackcatProposals || {};
+  const allConfirmed = activeWitches.every(pid => proposals[pid] && proposals[pid].confirmed);
+  if (!allConfirmed) return { ready: false, target: null };
+  const targets = new Set(activeWitches.map(pid => proposals[pid].target));
+  if (targets.size !== 1) return { ready: false, target: null };
+  return { ready: true, target: [...targets][0] };
 }
 function maybeResolveBlackcatPick(data) {
-  if (nightResolving || !data.blackcatPick) return;
+  if (nightResolving) return;
+  const result = blackcatConsensusTarget(data);
+  if (!result.ready || !result.target) return;
   nightResolving = true;
   const fresh = clone(data);
-  const holder = fresh.blackcatPick;
+  const holder = result.target;
   fresh.players[holder].equipment.push(fresh.pendingBlackcat);
   delete fresh.pendingBlackcat;
-  fresh.blackcatPick = null;
+  fresh.blackcatProposals = {};
   fresh.state = 'day';
   fresh.currentTurn = holder;
   fresh.turnHasPlayed = false;
@@ -435,7 +447,7 @@ async function returnToLobby() {
   data.state = 'lobby';
   data.log = ['回到大廳'];
   delete data.deck; delete data.discard; delete data.currentTurn; delete data.winner; delete data.night; delete data.reveal;
-  delete data.pendingNextTurnFrom; delete data.pendingBlackcat; delete data.blackcatPick; delete data.contagionPicks;
+  delete data.pendingNextTurnFrom; delete data.pendingBlackcat; delete data.blackcatProposals; delete data.contagionPicks; delete data.pendingResumeDraw;
   delete data.twoPlayerBluePurged;
   await set(roomRef(ROOM_CODE), data);
 }
@@ -490,9 +502,8 @@ function applyDeath(data, pid) {
   const farmerPid = data.turnOrder.find(x => x !== pid && data.players[x].alive && hasRole(data.players[x], 'farmer'));
   if (farmerPid) {
     const farmer = data.players[farmerPid];
-    farmer.hand.push(...p.hand);
-    farmer.equipment.push(...p.equipment);
-    if (p.hand.length || p.equipment.length) logPush(data, `🌾 ${farmer.name}（農民）獲得了 ${p.name} 的所有手牌和裝備`);
+    farmer.hand.push(...p.hand, ...p.equipment);
+    if (p.hand.length || p.equipment.length) logPush(data, `🌾 ${farmer.name}（農民）把 ${p.name} 的所有手牌和裝備都收進了自己的手牌`);
   } else {
     data.discard.push(...p.hand);
     data.discard.push(...p.equipment);
@@ -540,12 +551,11 @@ async function endTurn() {
   data.turnHasPlayed = false;
   await set(roomRef(ROOM_CODE), data);
 }
-async function drawTwo() {
-  const data = clone(lastRoomData);
-  if (data.state !== 'day' || data.currentTurn !== MY_PID) return;
-  if (data.turnHasPlayed) return alert('這回合已經出過牌，這回合不能再抽牌');
-  const isLandlord = hasRole(data.players[MY_PID], 'landlord');
-  let target = 2;
+// 共用抽牌邏輯：抽 count 張牌給 pid，遇到黑卡會中斷；若是傳染卡中斷、還有牌沒抽完，
+// 記錄到 data.pendingResumeDraw，等傳染事件全部結算完再自動補抽剩下的牌
+function performDraw(data, pid, count) {
+  const isLandlord = hasRole(data.players[pid], 'landlord');
+  let target = count;
   let drawn = 0;
   const drawnCards = [];
   while (drawn < target) {
@@ -555,16 +565,28 @@ async function drawTwo() {
     drawn++;
     if (card.color === 'black') {
       resolveBlackCard(data, card);
-      if (data.state !== 'day') break; // 轉入夜晚/傳染，這次抽牌到此為止，不會憑空遺失第二張牌
+      if (data.state !== 'day') {
+        if (card.type === 'contagion' && drawn < target) {
+          data.pendingResumeDraw = { pid, remaining: target - drawn };
+        }
+        break; // 轉入夜晚/傳染，這次抽牌到此為止，不會憑空遺失還沒抽的牌
+      }
     } else {
-      data.players[MY_PID].hand.push(card);
+      data.players[pid].hand.push(card);
       drawnCards.push(card);
-      if (isLandlord && target === 2 && drawnCards.length === 2 && drawnCards.every(c => c.color === 'red')) {
-        target = 3;
-        logPush(data, `🏚 ${data.players[MY_PID].name}（地主）連抽2張指控牌，額外再多抽1張`);
+      if (isLandlord && target === count && drawnCards.length === 2 && drawnCards.every(c => c.color === 'red')) {
+        target = count + 1;
+        logPush(data, `🏚 ${data.players[pid].name}（地主）連抽2張指控牌，額外再多抽1張`);
       }
     }
   }
+  return drawnCards;
+}
+async function drawTwo() {
+  const data = clone(lastRoomData);
+  if (data.state !== 'day' || data.currentTurn !== MY_PID) return;
+  if (data.turnHasPlayed) return alert('這回合已經出過牌，這回合不能再抽牌');
+  const drawnCards = performDraw(data, MY_PID, 2);
   if (data.state === 'day') {
     logPush(data, `${data.players[MY_PID].name} 抽了${drawnCards.length}張牌`);
     data.currentTurn = nextAlivePid(data, MY_PID);
@@ -588,11 +610,12 @@ function resolveBlackCard(data, card) {
   }
 }
 function doContagion(data) {
+  const drawerPid = data.currentTurn;
   const catHolderPid = alivePids(data).find(pid => data.players[pid].equipment.some(e => e.type === 'blackcat'));
   if (catHolderPid) {
     data.state = 'awaiting_reveal';
-    data.reveal = { targetPid: catHolderPid, cause: 'blackcat', nextState: 'contagion_pick' };
-    logPush(data, `🐈‍⬛ 黑貓持有者 ${data.players[catHolderPid].name} 必須先翻開一張自己的身份卡`);
+    data.reveal = { targetPid: catHolderPid, cause: 'blackcat', nextState: 'contagion_pick', triggeredByPid: drawerPid };
+    logPush(data, `🐈‍⬛ ${data.players[drawerPid].name} 抽到傳染卡，必須翻開黑貓持有者 ${data.players[catHolderPid].name} 的一張身份卡`);
   } else {
     data.state = 'contagion_pick';
     data.contagionPicks = {};
@@ -645,9 +668,22 @@ async function resolveContagionTransfer(data) {
   });
   data.contagionPicks = {};
   data.state = 'day';
-  data.currentTurn = nextAlivePid(data, data.pendingNextTurnFrom);
-  data.turnHasPlayed = false;
-  data.pendingNextTurnFrom = null;
+  const resume = data.pendingResumeDraw;
+  data.pendingResumeDraw = null;
+  if (resume && resume.pid && resume.remaining > 0 && data.players[resume.pid] && data.players[resume.pid].alive) {
+    // 傳染打斷了原本的抽兩張牌，事件結束後幫他把剩下的牌補抽完（可能因此直接進入夜晚）
+    const more = performDraw(data, resume.pid, resume.remaining);
+    if (data.state === 'day') {
+      logPush(data, `${data.players[resume.pid].name} 補完了剛才被傳染打斷的抽牌`);
+      data.currentTurn = nextAlivePid(data, resume.pid);
+      data.turnHasPlayed = false;
+    }
+    data.pendingNextTurnFrom = null;
+  } else {
+    data.currentTurn = nextAlivePid(data, data.pendingNextTurnFrom);
+    data.turnHasPlayed = false;
+    data.pendingNextTurnFrom = null;
+  }
   await set(roomRef(ROOM_CODE), data);
 }
 
@@ -700,12 +736,11 @@ async function playCard(cardId, targets, subTarget, asWitness) {
         dst.accusationTotal += src.accusationTotal;
         dst.accusationCards.push(...src.accusationCards);
         src.accusationTotal = 0; src.accusationCards = [];
-        const movable = src.equipment.filter(e => e.type !== 'blackcat');
-        dst.equipment.push(...movable);
-        src.equipment = src.equipment.filter(e => e.type === 'blackcat');
+        dst.equipment.push(...src.equipment);
+        src.equipment = [];
         dst.skipTurns = (dst.skipTurns || 0) + (src.skipTurns || 0);
         src.skipTurns = 0;
-        logPush(data, `${me.name} 用嫁禍把 ${src.name} 面前的紅/綠/藍卡全部轉移給 ${dst.name}`);
+        logPush(data, `${me.name} 用嫁禍把 ${src.name} 面前的紅/綠/藍卡（含黑貓、拘留效果）全部轉移給 ${dst.name}`);
         if (src.loverWith && src.loverWith !== t2) {
           const dPid = src.loverWith;
           const dPlayer = data.players[dPid];
@@ -788,12 +823,29 @@ async function playCard(cardId, targets, subTarget, asWitness) {
       case 'lovers': {
         const t1 = targets[0], t2 = targets[1];
         if (!t1 || !t2 || t1 === t2) { me.hand.splice(idx, 0, card); return alert('情侶需要選擇兩位不同的玩家'); }
-        if (data.players[t1].loverWith || data.players[t2].loverWith) { me.hand.splice(idx, 0, card); return alert('這兩位玩家其中一位已經有情侶了，情侶牌不能綁定已經配對過的人'); }
-        data.players[t1].loverWith = t2;
-        data.players[t2].loverWith = t1;
-        data.players[t1].equipment.push({ ...card, id: card.id + '_a' });
-        data.players[t2].equipment.push({ ...card, id: card.id + '_b' });
-        logPush(data, `💞 ${data.players[t1].name} 與 ${data.players[t2].name} 成為情侶`);
+        const p1 = data.players[t1], p2 = data.players[t2];
+        if (p1.loverWith === t2 && p2.loverWith === t1) {
+          // 場上已經有一對情侶了：用這張牌直接拆散他們，而不是配對新的一對
+          const removeLoverEquip = p => {
+            const i = p.equipment.findIndex(e => e.type === 'lovers');
+            if (i >= 0) data.discard.push(p.equipment.splice(i, 1)[0]);
+          };
+          removeLoverEquip(p1);
+          removeLoverEquip(p2);
+          p1.loverWith = null;
+          p2.loverWith = null;
+          data.discard.push(card);
+          logPush(data, `💔 ${me.name} 用情侶牌拆散了 ${p1.name} 與 ${p2.name} 的情侶關係`);
+        } else if (p1.loverWith || p2.loverWith) {
+          me.hand.splice(idx, 0, card);
+          return alert('這兩位玩家其中一位已經有情侶了，只能選擇「完全配對的一對」來拆散，或選擇兩位都還沒配對的玩家組成新的情侶');
+        } else {
+          p1.loverWith = t2;
+          p2.loverWith = t1;
+          p1.equipment.push({ ...card, id: card.id + '_a' });
+          p2.equipment.push({ ...card, id: card.id + '_b' });
+          logPush(data, `💞 ${p1.name} 與 ${p2.name} 成為情侶`);
+        }
         break;
       }
     }
@@ -907,7 +959,7 @@ async function resolveNightConfessOutcome(data) {
 
 // ── 強制翻牌（審判 / 夜晚自首 / 黑貓） ────────────────────────────────────────
 function revealChooserPid(reveal) {
-  return reveal.cause === 'trial' ? reveal.triggeredByPid : reveal.targetPid;
+  return (reveal.cause === 'trial' || reveal.cause === 'blackcat') ? reveal.triggeredByPid : reveal.targetPid;
 }
 async function resolveReveal(cardIndex) {
   const data = clone(lastRoomData);
@@ -1244,7 +1296,7 @@ function renderNight(data) {
 function renderAwaitingReveal(data) {
   setBg(data.reveal.cause === 'trial' ? 'trial' : data.reveal.cause === 'blackcat' ? 'contagion' : 'night');
   const cause = data.reveal.cause;
-  const causeText = { trial: '指控達到7點，被送上審判台', night: '自首了，選擇要翻開哪一張身份卡', blackcat: '傳染事件發生，黑貓持有者必須翻牌' }[cause];
+  const causeText = { trial: '指控達到7點，被送上審判台', night: '自首了，選擇要翻開哪一張身份卡', blackcat: '傳染事件發生，持有黑貓，要被抽到傳染卡的玩家翻開一張身份卡' }[cause];
   const target = data.players[data.reveal.targetPid];
   const chooserPid = revealChooserPid(data.reveal);
   const isChooser = chooserPid === MY_PID;
@@ -1306,17 +1358,31 @@ function renderNightConfess(data) {
   }
 }
 
-// ── Render: 指定黑貓持有者（起始玩家） ────────────────────────────────────────
+// ── Render: 指定黑貓持有者（起始玩家，所有女巫需選同一人並確定） ─────────────
+let pendingBlackcatTarget = null;
 function renderAssignBlackcat(data) {
   setBg('blackcat');
   const me = data.players[MY_PID];
   const canPick = isWitchTeam(me);
-  const done = !!data.blackcatPick;
+  const proposals = data.blackcatProposals || {};
+  const activeWitches = data.turnOrder.filter(pid => isWitchTeam(data.players[pid]));
+  if (!proposals[MY_PID]) pendingBlackcatTarget = null; // 新一輪，清掉本地殘留選取
+
   let body;
   if (canPick) {
     const bcCandidates = data.turnOrder.filter(pid => !hasRole(data.players[pid], 'maid'));
-    body = `<h3>🐈‍⬛ 請選擇一位玩家放置黑貓（他將成為起始玩家）</h3>
-      <div class="target-picker">${bcCandidates.map(pid => `<span class="target-btn ${data.blackcatPick === pid ? 'picked' : ''}" data-bc="${pid}">${data.players[pid].name}</span>`).join('')}</div>`;
+    const myProposal = proposals[MY_PID];
+    const myPick = pendingBlackcatTarget !== null ? pendingBlackcatTarget : (myProposal ? myProposal.target : null);
+    const myConfirmed = myProposal && myProposal.confirmed && myPick === myProposal.target;
+    const statusRows = activeWitches.map(pid => {
+      const p = proposals[pid];
+      const label = p ? `選擇了 ${data.players[p.target].name}${p.confirmed ? ' ✓已確定' : '（尚未確定）'}` : '尚未選擇';
+      return `<div class="muted">🔮 ${data.players[pid].name}${pid === MY_PID ? '（你）' : ''}：${label}</div>`;
+    }).join('');
+    body = `<h3>🐈‍⬛ 請選擇一位玩家放置黑貓（他將成為起始玩家，所有女巫都要選擇並確定同一人）</h3>
+      ${statusRows}
+      <div class="target-picker" style="margin-top:8px">${bcCandidates.map(pid => `<span class="target-btn ${myPick === pid ? 'picked' : ''}" data-bc="${pid}">${data.players[pid].name}</span>`).join('')}</div>
+      <button class="btn-primary btn-sm" id="btnConfirmBc" ${(myPick && !myConfirmed) ? '' : 'disabled'} style="width:auto">確定目標</button>`;
   } else {
     body = `<div class="muted center">🐈‍⬛ 女巫方正在選擇黑貓持有者（起始玩家）...</div>`;
   }
@@ -1328,9 +1394,17 @@ function renderAssignBlackcat(data) {
       <div class="row">${me.identityCards.map(c => identityPill(c.type)).join('')}</div>
       ${me.characterRole ? `<div class="muted" style="margin-top:6px">🎭 特殊角色：<b>${CHARACTER_DEFS[me.characterRole.type].name}</b> — ${CHARACTER_DEFS[me.characterRole.type].desc}</div>` : ''}
     </div>
-    <div class="card">${body}${done ? `<div class="muted" style="margin-top:8px">已選擇：${data.players[data.blackcatPick].name}</div>` : ''}</div>
+    <div class="card">${body}</div>
   `);
-  if (canPick) el('app').querySelectorAll('[data-bc]').forEach(elm => elm.onclick = () => submitBlackcatPick(elm.getAttribute('data-bc')));
+  if (canPick) {
+    el('app').querySelectorAll('[data-bc]').forEach(elm => elm.onclick = () => {
+      pendingBlackcatTarget = elm.getAttribute('data-bc');
+      submitBlackcatPick(pendingBlackcatTarget, false);
+      renderAssignBlackcat(lastRoomData);
+    });
+    const btn = el('btnConfirmBc');
+    if (btn) btn.onclick = () => { submitBlackcatPick(pendingBlackcatTarget, true); };
+  }
 }
 
 // ── Render: 傳染 — 全員選擇從前一位玩家取得一張身份卡 ─────────────────────────
