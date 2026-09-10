@@ -1,0 +1,6 @@
+.vercel
+node_modules
+*.pdf
+
+# 原始生圖素材（未壓縮，未被 index.html 引用），只保留 assets/ 底下實際使用的壓縮版
+/*.png

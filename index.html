@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>獵巫鎮 Salem 1692</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0b0a10;
+    --text: #d9cdb8;
+    --gold: #b9903a;
+    --card-bg: rgba(20,16,10,0.85);
+    --border: #35301f;
+    --dim: #786a4e;
+    --witch: #5a2d7a;
+    --witch-light: #8144ab;
+    --sheriff: #b08d2f;
+    --villager: #3a5f4a;
+    --danger: #8a1f1f;
+    --c-black: #23222a;
+    --c-blue: #1c3a5c;
+    --c-green: #245a34;
+    --c-red: #6e1c1c;
+  }
+
+  body {
+    background-color: var(--bg);
+    background-image: linear-gradient(rgba(11,10,16,0.4), rgba(11,10,16,0.55)), radial-gradient(ellipse at top, rgba(90,45,122,0.15), transparent 60%), url('assets/background.jpg');
+    background-size: cover, cover, cover;
+    background-position: center, center, center top;
+    background-attachment: fixed, fixed, fixed;
+    transition: background-image .3s;
+    color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 16px 0 40px;
+  }
+
+  #app { width: 100%; max-width: 520px; padding: 0 16px; }
+
+  h1 { text-align: center; font-size: 2rem; color: var(--gold); text-shadow: 0 0 20px rgba(185,144,58,0.4); margin-bottom: 4px; letter-spacing: 2px; }
+  h2 { color: var(--gold); font-size: 1.15rem; margin-bottom: 10px; }
+  h3 { color: var(--text); font-size: 0.95rem; margin-bottom: 6px; }
+  .subtitle { text-align: center; color: var(--dim); font-size: 0.82rem; margin-bottom: 20px; }
+
+  body.home { background-image: linear-gradient(rgba(11,10,16,0.32), rgba(11,10,16,0.5)), url('assets/home-bg.jpg'); }
+  body.lobby { background-image: linear-gradient(rgba(11,10,16,0.35), rgba(11,10,16,0.5)), url('assets/lobby-bg.jpg'); }
+  body.blackcat { background-image: linear-gradient(rgba(11,10,16,0.38), rgba(11,10,16,0.55)), url('assets/blackcat-portrait.jpg'); }
+  body.day { background-image: linear-gradient(rgba(11,10,16,0.4), rgba(11,10,16,0.55)), url('assets/day-bg.jpg'); }
+  body.night { background-image: linear-gradient(rgba(11,10,16,0.45), rgba(11,10,16,0.6)), url('assets/night-bg.jpg'); }
+  body.trial { background-image: linear-gradient(rgba(11,10,16,0.38), rgba(11,10,16,0.55)), url('assets/trial-bg.jpg'); }
+  body.contagion { background-image: linear-gradient(rgba(11,10,16,0.38), rgba(11,10,16,0.55)), url('assets/contagion-bg.jpg'); }
+  body.end-villager { background-image: linear-gradient(rgba(11,10,16,0.25), rgba(11,10,16,0.45)), url('assets/end-villager-bg.jpg'); }
+  body.end-witch { background-image: linear-gradient(rgba(11,10,16,0.35), rgba(11,10,16,0.5)), url('assets/end-witch-bg.jpg'); }
+  .scene-portrait { display: block; width: 100%; max-width: 220px; margin: 0 auto 10px; border-radius: 10px; border: 1px solid var(--border); }
+
+  .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  .card.witch { border-color: var(--witch-light); background: rgba(90,45,122,0.15); }
+  .card.danger { border-color: var(--danger); background: rgba(138,31,31,0.15); }
+
+  input[type="text"] {
+    width: 100%; background: #0d0a05; border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 11px; font-size: 1rem; margin-bottom: 8px; outline: none;
+  }
+  input[type="text"]:focus { border-color: var(--gold); }
+  input[type="text"]::placeholder { color: var(--dim); }
+
+  button {
+    padding: 10px 14px; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600;
+    cursor: pointer; margin: 3px 4px 3px 0; letter-spacing: 0.3px; transition: filter .15s, transform .15s;
+  }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-primary { background: linear-gradient(135deg, #b9903a, #86641f); color: #0d0a05; width: 100%; padding: 13px; }
+  .btn-primary:hover:not(:disabled) { filter: brightness(1.15); }
+  .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn-secondary:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+  .btn-sm { padding: 6px 10px; font-size: 0.78rem; }
+  .btn-witch { background: var(--witch); color: #fff; }
+  .btn-danger { background: var(--danger); color: #fff; }
+
+  .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; margin: 2px; }
+  .pill.alive { background: #234; color: #9cf; }
+  .pill.dead { background: #332; color: #987; text-decoration: line-through; }
+  .pill.witch { background: var(--witch); color: #fff; }
+  .pill.sheriff { background: var(--sheriff); color: #201800; }
+  .pill.villager { background: var(--villager); color: #dfe; }
+  .pill.hidden { background: #1a1a22; color: var(--dim); border: 1px dashed var(--border); }
+  .pill { padding: 4px 12px 4px 4px; }
+  .pill img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; border: 1px solid rgba(255,255,255,0.25); }
+
+  .player-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.03); margin-bottom: 6px; }
+  .player-row.me { border: 1px solid var(--gold); }
+  .player-row.turn { border: 1px solid #6fa; box-shadow: 0 0 10px rgba(100,255,180,0.15); }
+  .player-name { font-weight: 600; }
+  .accuse-bar { display: inline-block; width: 60px; height: 6px; background: #222; border-radius: 3px; overflow: hidden; vertical-align: middle; margin-left: 6px; }
+  .accuse-fill { height: 100%; background: var(--danger); }
+
+  .gamecard { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px; border-radius: 10px; font-size: 0.8rem; margin: 4px; min-width: 84px; color: #fff; cursor: pointer; border: 1px solid rgba(255,255,255,0.15); }
+  .gamecard.black { background: var(--c-black); }
+  .gamecard.blue { background: var(--c-blue); }
+  .gamecard.green { background: var(--c-green); }
+  .gamecard.red { background: var(--c-red); }
+  .gamecard .nm { font-weight: 700; }
+  .gamecard.selected { outline: 2px solid var(--gold); }
+  .gamecard img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; }
+
+  .target-picker { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; padding: 8px; background: rgba(0,0,0,0.25); border-radius: 8px; }
+  .target-btn { padding: 6px 10px; border-radius: 6px; background: #222; color: var(--text); border: 1px solid var(--border); cursor: pointer; font-size: 0.8rem; }
+  .target-btn.picked { border-color: var(--gold); color: var(--gold); }
+
+  .log { max-height: 140px; overflow-y: auto; font-size: 0.75rem; color: var(--dim); background: rgba(0,0,0,0.25); border-radius: 8px; padding: 8px; margin-bottom: 10px; }
+  .log div { margin-bottom: 3px; }
+
+  .center { text-align: center; }
+  .roomcode { font-size: 1.8rem; letter-spacing: 6px; color: var(--gold); font-weight: 700; text-align: center; margin: 10px 0; }
+  .muted { color: var(--dim); font-size: 0.8rem; }
+  .banner { text-align: center; font-size: 1.4rem; font-weight: 700; padding: 16px; border-radius: 10px; margin-bottom: 14px; }
+  .banner.villager { background: rgba(58,95,74,0.3); color: #9fd; border: 1px solid var(--villager); }
+  .banner.witch { background: rgba(90,45,122,0.3); color: #ecb; border: 1px solid var(--witch-light); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getDatabase, ref, set, get, update, onValue } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+
+// ── Firebase (共用阿瓦隆專案，換一個 root path 隔開資料) ──────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyBGemaRvrcSoY-Ix9-B3b6ll6LGl9-UYCw",
+  authDomain: "avalon-654aa.firebaseapp.com",
+  databaseURL: "https://avalon-654aa-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "avalon-654aa",
+  storageBucket: "avalon-654aa.firebasestorage.app",
+  messagingSenderId: "914764536539",
+  appId: "1:914764536539:web:3f10eb5889f7ab8cac0afe",
+};
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const ROOT = 'salem_rooms';
+
+// ── 卡牌設定（張數為官方未公開的合理估計，之後可依實體牌調整）───────────────
+const CARD_DEFS = {
+  black: [
+    { type: 'contagion', name: '傳染', count: 1, desc: '黑貓持有者先自選翻開自己一張身份卡；接著所有玩家依序盲選拿取前一位玩家一張未揭露的身份卡（拿到女巫卡會加入女巫陣營，原本的人仍然是女巫；拿到警長卡會成為新警長，原警長失去警長身份）' },
+    { type: 'night', name: '夜晚', count: 1, desc: '進入夜晚：女巫方共同選定一名獵殺目標、警長選定保護對象。永遠是牌堆最底一張，公布結果後棄牌會重洗成新牌堆' },
+  ],
+  blue: [
+    { type: 'blackcat', name: '黑貓', count: 1, desc: '遊戲開局由女巫方指定一位玩家持有，該玩家成為起始玩家。之後若因詛咒等原因回到棄牌堆、又被重新抽到打出，只是普通裝備、沒有特殊效果' },
+    { type: 'lovers', name: '情侶', count: 2, desc: '選擇兩位尚未配對過的玩家成為情侶（雙方都會裝備此卡並標示對象）。其中一人死亡時，另一人會同時殉情死亡。全場只有2張情侶卡，同時間只會存在一對情侶' },
+    { type: 'shelter', name: '避難', count: 1, desc: '持有者在夜晚不會被女巫殺死' },
+    { type: 'believer', name: '信徒', count: 1, desc: '其他玩家無法直接對持有者打出紅卡（指控/證據/目擊）' },
+  ],
+  green: [
+    { type: 'frame', name: '嫁禍', count: 2, desc: '先選來源玩家、再選接收者：把來源面前的紅卡(指控點數)、藍卡(裝備)、拘留效果全部轉移給接收者（剩2人時不可用）。若來源有情侶關係，情侶會改成與接收者配對' },
+    { type: 'rob', name: '搶劫', count: 1, desc: '先選手牌被拿走者、再選接收者：來源的所有手牌交給接收者（剩2人時不可用）' },
+    { type: 'arson', name: '縱火', count: 1, desc: '燒毀目標的所有手牌' },
+    { type: 'curse', name: '詛咒', count: 1, desc: '選擇丟棄目標一張裝備(藍卡)，目標沒有裝備時不可用。若丟棄的是情侶卡，雙方的情侶關係一起解除，但只會有1張情侶卡進棄牌堆' },
+    { type: 'detain', name: '拘留', count: 3, desc: '目標跳過下一回合（此效果可被嫁禍轉移給別人）' },
+    { type: 'defend', name: '辯護', count: 3, desc: '減少目標3點審判點' },
+  ],
+  red: [
+    { type: 'accuse', name: '指控', value: 1, count: 35, desc: '對目標 +1 點審判點，累積到7點觸發審判（信徒無法被直接指控）' },
+    { type: 'evidence', name: '證據', value: 3, count: 5, desc: '對目標 +3 點審判點，累積到7點觸發審判（信徒無法被直接指控）' },
+    { type: 'witness', name: '目擊', value: 7, count: 1, desc: '對目標 +7 點審判點，單張就直接觸發審判（信徒無法被直接指控）' },
+  ],
+};
+const IDENTITY_LABEL = { witch: '女巫', sheriff: '警長', villager: '村民' };
+const IDENTITY_CLASS = { witch: 'witch', sheriff: 'sheriff', villager: 'villager' };
+const IDENTITY_IMG = { witch: 'assets/witch.jpg', sheriff: 'assets/sheriff.jpg', villager: 'assets/villager.jpg' };
+const CARD_IMG = { black: 'assets/card-black.jpg', blue: 'assets/card-blue.jpg', green: 'assets/card-green.jpg', red: 'assets/card-red.jpg' };
+function identityPill(type, extra) {
+  return `<span class="pill ${IDENTITY_CLASS[type]}"><img src="${IDENTITY_IMG[type]}">${IDENTITY_LABEL[type]}${extra || ''}</span>`;
+}
+
+// ── 基本工具 ──────────────────────────────────────────────────────────────────
+function randCode() {
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let s = '';
+  for (let i = 0; i < 4; i++) s += A[Math.floor(Math.random() * A.length)];
+  return s;
+}
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+// Firebase RTDB 會把空陣列/空物件/null 欄位直接砍掉，讀回來時要補回預設值，避免到處炸 undefined
+function normalize(data) {
+  if (!data) return data;
+  data.turnOrder = data.turnOrder || [];
+  data.log = data.log || [];
+  data.deck = data.deck || [];
+  data.discard = data.discard || [];
+  if (data.players) {
+    for (const pid of Object.keys(data.players)) {
+      const p = data.players[pid];
+      p.identityCards = p.identityCards || [];
+      p.hand = p.hand || [];
+      p.equipment = p.equipment || [];
+      p.accusationCards = p.accusationCards || [];
+      p.accusationTotal = p.accusationTotal || 0;
+      p.skipTurns = p.skipTurns || 0;
+      p.isWitchFaction = !!p.isWitchFaction;
+    }
+  }
+  data.turnHasPlayed = !!data.turnHasPlayed;
+  if (data.state === 'night') {
+    data.night = data.night || {};
+    data.night.witchProposals = data.night.witchProposals || {};
+  }
+  if (data.state === 'night_confess') data.nightConfessChoices = data.nightConfessChoices || {};
+  if (data.state === 'assign_blackcat') data.blackcatPick = data.blackcatPick || null;
+  if (data.state === 'contagion_pick') data.contagionPicks = data.contagionPicks || {};
+  return data;
+}
+function el(id) { return document.getElementById(id); }
+function render(html) { el('app').innerHTML = html; }
+const BG_CLASSES = ['home', 'lobby', 'blackcat', 'day', 'night', 'trial', 'contagion', 'end-villager', 'end-witch'];
+function setBg(name) {
+  document.body.classList.remove(...BG_CLASSES);
+  if (name) document.body.classList.add(name);
+}
+function roomRef(code) { return ref(db, `${ROOT}/${code || ROOM_CODE}`); }
+function logPush(data, text) {
+  data.log = data.log || [];
+  data.log.push(text);
+  if (data.log.length > 60) data.log.shift();
+}
+function name(data, pid) { return (data.players[pid] && data.players[pid].name) || '?'; }
+
+// ── 身份 / 房間狀態 ───────────────────────────────────────────────────────────
+let MY_PID = sessionStorage.getItem('salem_pid');
+if (!MY_PID) { MY_PID = 'p' + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('salem_pid', MY_PID); }
+let MY_NAME = sessionStorage.getItem('salem_name') || '';
+let ROOM_CODE = sessionStorage.getItem('salem_room') || '';
+let lastRoomData = null;
+let selectedCardId = null;   // 目前選取準備出的手牌 id
+let selectedTargets = [];    // 出牌時已選的目標 pid 陣列
+let selectedSubTarget = null; // 詛咒用：選擇要丟棄目標的哪一張裝備 id
+let unsub = null;
+let nightResolving = false;  // 避免 host 重複觸發夜晚結算
+
+// ── 遊戲卡牌堆 ────────────────────────────────────────────────────────────────
+function buildGameDeck() {
+  let n = 0;
+  const deck = [];
+  for (const color of ['black', 'blue', 'green', 'red']) {
+    for (const def of CARD_DEFS[color]) {
+      for (let i = 0; i < def.count; i++) {
+        deck.push({ id: 'c' + (n++), color, type: def.type, name: def.name, value: def.value || null });
+      }
+    }
+  }
+  return deck;
+}
+function buildIdentityDeck(numPlayers) {
+  // 官方配置表：4-7人每人5張、8-9人每人4張、10-12人每人3張；女巫4-5人1張，6-12人2張
+  const perPlayer = numPlayers <= 7 ? 5 : (numPlayers <= 9 ? 4 : 3);
+  const witchCount = numPlayers <= 5 ? 1 : 2;
+  const total = numPlayers * perPlayer;
+  const deck = [];
+  for (let i = 0; i < witchCount; i++) deck.push({ type: 'witch' });
+  deck.push({ type: 'sheriff' });
+  while (deck.length < total) deck.push({ type: 'villager' });
+  const shuffled = shuffle(deck);
+  shuffled.forEach((c, i) => { c.id = 'id' + i; c.revealed = false; });
+  return { deck: shuffled, perPlayer };
+}
+
+// ── 建房 / 加入房 ─────────────────────────────────────────────────────────────
+async function createRoom() {
+  const nm = el('nameInput').value.trim();
+  if (!nm) return alert('請輸入名字');
+  MY_NAME = nm; sessionStorage.setItem('salem_name', MY_NAME);
+  const code = randCode();
+  const data = {
+    state: 'lobby',
+    hostPid: MY_PID,
+    turnOrder: [MY_PID],
+    players: { [MY_PID]: { name: MY_NAME, alive: true, identityCards: [], hand: [], equipment: [], accusationTotal: 0, accusationCards: [], skipTurns: 0, loverWith: null } },
+    log: ['房間建立'],
+  };
+  await set(roomRef(code), data);
+  ROOM_CODE = code; sessionStorage.setItem('salem_room', code);
+  subscribe();
+}
+async function joinRoom(codeRaw) {
+  const nm = el('nameInput').value.trim();
+  const code = (codeRaw || el('codeInput').value.trim()).toUpperCase();
+  if (!nm) return alert('請輸入名字');
+  if (!code) return alert('請輸入房號');
+  const snap = await get(roomRef(code));
+  if (!snap.exists()) return alert('找不到房間');
+  const data = normalize(snap.val());
+  if (data.state !== 'lobby' && !data.players[MY_PID]) return alert('遊戲已經開始，無法加入');
+  MY_NAME = nm; sessionStorage.setItem('salem_name', MY_NAME);
+  if (!data.players[MY_PID]) {
+    if (Object.keys(data.players).length >= 12) return alert('房間已滿(12人)');
+    await update(ref(db, `${ROOT}/${code}/players/${MY_PID}`), { name: MY_NAME, alive: true, identityCards: [], hand: [], equipment: [], accusationTotal: 0, accusationCards: [], skipTurns: 0, loverWith: null });
+    await set(ref(db, `${ROOT}/${code}/turnOrder`), [...data.turnOrder, MY_PID]);
+  }
+  ROOM_CODE = code; sessionStorage.setItem('salem_room', code);
+  subscribe();
+}
+function leaveToHome() {
+  sessionStorage.removeItem('salem_room');
+  ROOM_CODE = ''; lastRoomData = null;
+  if (unsub) unsub();
+  renderHome();
+}
+
+function subscribe() {
+  if (unsub) unsub();
+  unsub = onValue(roomRef(ROOM_CODE), (snap) => {
+    const data = normalize(snap.val());
+    if (!data) { leaveToHome(); return; }
+    lastRoomData = data;
+    renderState(data);
+  });
+}
+
+// ── 開始遊戲（host） ──────────────────────────────────────────────────────────
+async function startGame() {
+  const data = clone(lastRoomData);
+  const order = data.turnOrder;
+  if (order.length < 4) return alert('至少需要4人才能開始');
+  if (order.length > 12) return alert('最多12人');
+
+  const { deck: idDeck, perPlayer } = buildIdentityDeck(order.length);
+  let cursor = 0;
+  for (const pid of order) {
+    const cards = idDeck.slice(cursor, cursor + perPlayer);
+    data.players[pid].identityCards = cards;
+    data.players[pid].isWitchFaction = cards.some(c => c.type === 'witch');
+    cursor += perPlayer;
+  }
+
+  let gameDeck = buildGameDeck();
+  const blackCat = gameDeck.find(c => c.type === 'blackcat');
+  const contagion = gameDeck.find(c => c.type === 'contagion');
+  const night = gameDeck.find(c => c.type === 'night');
+  gameDeck = gameDeck.filter(c => c.type !== 'blackcat' && c.type !== 'contagion' && c.type !== 'night');
+  gameDeck = shuffle(gameDeck);
+
+  for (const pid of order) {
+    data.players[pid].hand = gameDeck.splice(0, 3);
+  }
+  gameDeck = shuffle([...gameDeck, contagion]);
+  gameDeck.push(night); // 夜晚牌永遠在牌堆最底（最後才會被抽到）
+  data.pendingBlackcat = blackCat;
+
+  data.deck = gameDeck;
+  data.discard = [];
+  data.state = 'assign_blackcat';
+  data.currentTurn = null;
+  data.winner = null;
+  data.night = null;
+  data.reveal = null;
+  data.blackcatPick = null;
+  data.pendingNextTurnFrom = null;
+  logPush(data, '身份與手牌已發放，請女巫方選擇黑貓持有者（起始玩家）');
+
+  await set(roomRef(ROOM_CODE), data);
+}
+
+async function submitBlackcatPick(pid) {
+  await set(ref(db, `${ROOT}/${ROOM_CODE}/blackcatPick`), pid);
+}
+function maybeResolveBlackcatPick(data) {
+  if (nightResolving || !data.blackcatPick) return;
+  nightResolving = true;
+  const fresh = clone(data);
+  const holder = fresh.blackcatPick;
+  fresh.players[holder].equipment.push(fresh.pendingBlackcat);
+  delete fresh.pendingBlackcat;
+  fresh.blackcatPick = null;
+  fresh.state = 'day';
+  fresh.currentTurn = holder;
+  fresh.turnHasPlayed = false;
+  logPush(fresh, `🐈‍⬛ ${fresh.players[holder].name} 取得黑貓，將先手`);
+  set(roomRef(ROOM_CODE), fresh).finally(() => { nightResolving = false; });
+}
+
+async function returnToLobby() {
+  const data = clone(lastRoomData);
+  for (const pid of data.turnOrder) {
+    data.players[pid] = { name: data.players[pid].name, alive: true, identityCards: [], hand: [], equipment: [], accusationTotal: 0, accusationCards: [], skipTurns: 0, loverWith: null, isWitchFaction: false };
+  }
+  data.state = 'lobby';
+  data.log = ['回到大廳'];
+  delete data.deck; delete data.discard; delete data.currentTurn; delete data.winner; delete data.night; delete data.reveal;
+  delete data.pendingNextTurnFrom; delete data.pendingBlackcat; delete data.blackcatPick; delete data.contagionPicks;
+  await set(roomRef(ROOM_CODE), data);
+}
+
+// ── 玩家/身份 輔助判斷 ────────────────────────────────────────────────────────
+function isWitchTeam(p) { return !!p.isWitchFaction; }
+function isActiveWitch(p) { return p.alive && !!p.isWitchFaction; }
+function isActiveSheriff(p) { return p.alive && p.identityCards.some(c => c.type === 'sheriff' && !c.revealed); }
+function alivePids(data) { return data.turnOrder.filter(pid => data.players[pid].alive); }
+function nextAlivePid(data, fromPid) {
+  const order = data.turnOrder;
+  let idx = order.indexOf(fromPid);
+  for (let i = 0; i < order.length; i++) {
+    idx = (idx + 1) % order.length;
+    const cand = order[idx];
+    const p = data.players[cand];
+    if (!p.alive) continue;
+    if (p.skipTurns > 0) { p.skipTurns--; logPush(data, `${p.name} 被拘留，跳過這回合`); continue; }
+    return cand;
+  }
+  return fromPid;
+}
+function checkWin(data) {
+  const allWitchCards = [];
+  for (const pid of data.turnOrder) for (const c of data.players[pid].identityCards) if (c.type === 'witch') allWitchCards.push(c);
+  if (allWitchCards.length > 0 && allWitchCards.every(c => c.revealed)) return 'villager';
+  const alive = alivePids(data).map(pid => data.players[pid]);
+  if (alive.length > 0 && alive.every(p => isWitchTeam(p))) return 'witch';
+  return null;
+}
+function reshuffleIfNeeded(data, needed) {
+  if (data.deck.length < needed) {
+    data.deck = data.deck.concat(shuffle(data.discard));
+    data.discard = [];
+  }
+}
+// 夜晚結果公佈後：棄牌（含傳染）全部洗混成新抽牌堆，夜晚牌固定放最底
+function reshuffleAfterNight(data) {
+  const nightIdx = data.discard.findIndex(c => c.type === 'night');
+  const nightCard = nightIdx >= 0 ? data.discard.splice(nightIdx, 1)[0] : null;
+  data.deck = shuffle(data.discard);
+  data.discard = [];
+  if (nightCard) data.deck.push(nightCard);
+  logPush(data, '🔄 棄牌重新洗混成新的抽牌堆');
+}
+function applyDeath(data, pid) {
+  const p = data.players[pid];
+  if (!p.alive) return;
+  p.alive = false;
+  data.discard.push(...p.hand); p.hand = [];
+  data.discard.push(...p.equipment);
+  p.equipment = [];
+  p.identityCards.forEach(c => c.revealed = true);
+  logPush(data, `☠ ${p.name} 死亡，身份公開：${p.identityCards.map(c => IDENTITY_LABEL[c.type]).join('、')}`);
+  if (p.loverWith && data.players[p.loverWith] && data.players[p.loverWith].alive) {
+    logPush(data, `💔 ${data.players[p.loverWith].name} 因情侶殉情而死`);
+    applyDeath(data, p.loverWith);
+  }
+}
+// 只剩兩名玩家時，所有藍卡（手牌/裝備/牌堆/棄牌堆）全部移除遊戲，之後也不會再抽到藍卡
+function stripBlueCardsAtTwoPlayers(data) {
+  if (data.twoPlayerBluePurged) return;
+  if (alivePids(data).length !== 2) return;
+  data.twoPlayerBluePurged = true;
+  for (const pid of data.turnOrder) {
+    const p = data.players[pid];
+    p.hand = p.hand.filter(c => c.color !== 'blue');
+    p.equipment = [];
+    p.loverWith = null;
+  }
+  data.deck = data.deck.filter(c => c.color !== 'blue');
+  data.discard = data.discard.filter(c => c.color !== 'blue');
+  logPush(data, '⚠ 只剩兩名玩家，所有藍卡（含裝備）已從遊戲中移除，之後不會再抽到藍卡');
+}
+function forceReveal(data, pid, cardIndex) {
+  const p = data.players[pid];
+  const card = p.identityCards[cardIndex];
+  if (!card || card.revealed) return false;
+  card.revealed = true;
+  const exhausted = p.identityCards.every(c => c.revealed);
+  if (card.type === 'witch' || exhausted) applyDeath(data, pid);
+  return true;
+}
+
+// ── 白天行動 ──────────────────────────────────────────────────────────────────
+async function endTurn() {
+  const data = clone(lastRoomData);
+  if (data.state !== 'day' || data.currentTurn !== MY_PID || !data.turnHasPlayed) return;
+  logPush(data, `${data.players[MY_PID].name} 結束了回合`);
+  data.currentTurn = nextAlivePid(data, MY_PID);
+  data.turnHasPlayed = false;
+  await set(roomRef(ROOM_CODE), data);
+}
+async function drawTwo() {
+  const data = clone(lastRoomData);
+  if (data.state !== 'day' || data.currentTurn !== MY_PID) return;
+  if (data.turnHasPlayed) return alert('這回合已經出過牌，這回合不能再抽牌');
+  let drawn = 0;
+  while (drawn < 2) {
+    reshuffleIfNeeded(data, 1);
+    if (data.deck.length === 0) break;
+    const card = data.deck.shift();
+    drawn++;
+    if (card.color === 'black') {
+      resolveBlackCard(data, card);
+      if (data.state !== 'day') break; // 轉入夜晚/傳染，這次抽牌到此為止，不會憑空遺失第二張牌
+    } else {
+      data.players[MY_PID].hand.push(card);
+    }
+  }
+  if (data.state === 'day') {
+    logPush(data, `${data.players[MY_PID].name} 抽了兩張牌`);
+    data.currentTurn = nextAlivePid(data, MY_PID);
+    data.turnHasPlayed = false;
+  }
+  await set(roomRef(ROOM_CODE), data);
+}
+
+function resolveBlackCard(data, card) {
+  if (card.type === 'night') {
+    data.discard.push(card);
+    data.pendingNextTurnFrom = data.currentTurn;
+    data.state = 'night';
+    data.night = { witchTarget: null, sheriffProtect: null };
+    logPush(data, '🌙 夜幕降臨...');
+  } else if (card.type === 'contagion') {
+    logPush(data, '☣ 傳染爆發！');
+    data.pendingNextTurnFrom = data.currentTurn;
+    doContagion(data);
+    data.discard.push(card);
+  }
+}
+function doContagion(data) {
+  const catHolderPid = alivePids(data).find(pid => data.players[pid].equipment.some(e => e.type === 'blackcat'));
+  if (catHolderPid) {
+    data.state = 'awaiting_reveal';
+    data.reveal = { targetPid: catHolderPid, cause: 'blackcat', nextState: 'contagion_pick' };
+    logPush(data, `🐈‍⬛ 黑貓持有者 ${data.players[catHolderPid].name} 必須先翻開一張自己的身份卡`);
+  } else {
+    data.state = 'contagion_pick';
+    data.contagionPicks = {};
+    logPush(data, '☣ 所有玩家請選擇從前一位玩家取得一張身份卡');
+  }
+}
+function contagionOrder(data) { return data.turnOrder.filter(pid => data.players[pid].alive); }
+function contagionPredecessor(data, pid) {
+  const order = contagionOrder(data);
+  const i = order.indexOf(pid);
+  if (i < 0) return null;
+  return order[(i - 1 + order.length) % order.length];
+}
+async function submitContagionPick(idx) {
+  await set(ref(db, `${ROOT}/${ROOM_CODE}/contagionPicks/${MY_PID}`), idx);
+}
+function maybeResolveContagion(data) {
+  if (nightResolving) return;
+  const order = contagionOrder(data);
+  const ready = order.every(pid => {
+    const predPid = contagionPredecessor(data, pid);
+    const predUnrevealed = predPid ? data.players[predPid].identityCards.filter(c => !c.revealed).length : 0;
+    if (predUnrevealed === 0) return true;
+    return data.contagionPicks && data.contagionPicks[pid] !== undefined;
+  });
+  if (!ready) return;
+  nightResolving = true;
+  resolveContagionTransfer(clone(data)).finally(() => { nightResolving = false; });
+}
+async function resolveContagionTransfer(data) {
+  const order = contagionOrder(data);
+  const snapshot = {};
+  order.forEach(pid => { snapshot[pid] = data.players[pid].identityCards.filter(c => !c.revealed); });
+  order.forEach(pid => {
+    const predPid = contagionPredecessor(data, pid);
+    if (!predPid || predPid === pid) return;
+    const pool = snapshot[predPid];
+    if (!pool || pool.length === 0) return;
+    let idx = (data.contagionPicks && data.contagionPicks[pid] !== undefined) ? data.contagionPicks[pid] : 0;
+    if (idx < 0 || idx >= pool.length) idx = 0;
+    const picked = pool[idx];
+    const predPlayer = data.players[predPid];
+    const realIdx = predPlayer.identityCards.findIndex(c => c.id === picked.id);
+    if (realIdx >= 0) {
+      predPlayer.identityCards.splice(realIdx, 1);
+      data.players[pid].identityCards.push(picked);
+      if (picked.type === 'witch') data.players[pid].isWitchFaction = true;
+      logPush(data, `${data.players[pid].name} 從 ${predPlayer.name} 取得一張身份卡`);
+    }
+  });
+  data.contagionPicks = {};
+  data.state = 'day';
+  data.currentTurn = nextAlivePid(data, data.pendingNextTurnFrom);
+  data.turnHasPlayed = false;
+  data.pendingNextTurnFrom = null;
+  await set(roomRef(ROOM_CODE), data);
+}
+
+async function playCard(cardId, targets, subTarget) {
+  const data = clone(lastRoomData);
+  if (data.state !== 'day' || data.currentTurn !== MY_PID) return;
+  const me = data.players[MY_PID];
+  const idx = me.hand.findIndex(c => c.id === cardId);
+  if (idx < 0) return;
+  const card = me.hand[idx];
+  const target = targets[0] ? data.players[targets[0]] : null;
+
+  // 所有紅/綠/藍卡都不能對自己產生效果
+  if (targets.includes(MY_PID)) return alert('這張卡不能對自己使用');
+  if (card.color === 'red' && target && target.equipment.some(e => e.type === 'believer')) return alert(`${target.name} 是信徒，無法直接被指控`);
+  if ((card.color === 'red' || card.color === 'green' || card.color === 'blue') && !target) return alert('請選擇目標');
+  if (card.type === 'rob' && alivePids(data).length <= 2) return alert('只剩兩人時，搶劫無法使用');
+  if (card.type === 'frame' && alivePids(data).length <= 2) return alert('只剩兩人時，嫁禍無法使用');
+  if (card.type === 'curse' && target.equipment.length === 0) return alert(`${target.name} 沒有裝備(藍卡)，無法詛咒`);
+
+  me.hand.splice(idx, 1);
+
+  if (card.color === 'red') {
+    target.accusationCards.push({ cardId: card.id, value: card.value, byPid: MY_PID });
+    target.accusationTotal += card.value;
+    logPush(data, `${me.name} 對 ${target.name} 打出「${card.name}」（+${card.value}，累計 ${target.accusationTotal}）`);
+    data.discard.push(card);
+    if (target.accusationTotal >= 7) {
+      data.pendingNextTurnFrom = MY_PID;
+      data.state = 'awaiting_reveal';
+      data.reveal = { targetPid: targets[0], cause: 'trial', triggeredByPid: MY_PID };
+      logPush(data, `⚖ ${target.name} 指控達到7點，被 ${me.name} 送上審判台！`);
+    }
+  } else {
+    switch (card.type) {
+      case 'frame': {
+        const t1 = targets[0], t2 = targets[1]; // t1: 被轉移的來源, t2: 接收者
+        if (!t1 || !t2 || t1 === t2) { me.hand.splice(idx, 0, card); return alert('嫁禍需要選擇兩位不同的玩家'); }
+        const src = data.players[t1], dst = data.players[t2];
+        dst.accusationTotal += src.accusationTotal;
+        dst.accusationCards.push(...src.accusationCards);
+        src.accusationTotal = 0; src.accusationCards = [];
+        const movable = src.equipment.filter(e => e.type !== 'blackcat');
+        dst.equipment.push(...movable);
+        src.equipment = src.equipment.filter(e => e.type === 'blackcat');
+        dst.skipTurns = (dst.skipTurns || 0) + (src.skipTurns || 0);
+        src.skipTurns = 0;
+        logPush(data, `${me.name} 用嫁禍把 ${src.name} 面前的紅/綠/藍卡全部轉移給 ${dst.name}`);
+        if (src.loverWith && src.loverWith !== t2) {
+          const dPid = src.loverWith;
+          const dPlayer = data.players[dPid];
+          src.loverWith = null;
+          dst.loverWith = dPid;
+          if (dPlayer) dPlayer.loverWith = t2;
+          logPush(data, `💞 情侶關係也一併轉移：${dst.name} 與 ${dPlayer ? dPlayer.name : '?'} 成為新的情侶`);
+        } else if (src.loverWith === t2) {
+          src.loverWith = null;
+          dst.loverWith = null;
+        }
+        data.discard.push(card);
+        break;
+      }
+      case 'rob': {
+        const t1 = targets[0], t2 = targets[1]; // t1: 手牌被拿走者, t2: 接收者
+        if (!t1 || !t2 || t1 === t2) { me.hand.splice(idx, 0, card); return alert('搶劫需要選擇兩位不同的玩家'); }
+        const src = data.players[t1], dst = data.players[t2];
+        dst.hand.push(...src.hand);
+        src.hand = [];
+        logPush(data, `${me.name} 用搶劫把 ${src.name} 的所有手牌交給了 ${dst.name}`);
+        data.discard.push(card);
+        break;
+      }
+      case 'arson': {
+        data.discard.push(...target.hand);
+        target.hand = [];
+        logPush(data, `${me.name} 縱火燒毀了 ${target.name} 的所有手牌`);
+        data.discard.push(card);
+        break;
+      }
+      case 'curse': {
+        let eqIdx = target.equipment.findIndex(e => e.id === subTarget);
+        if (eqIdx < 0) eqIdx = 0;
+        const removed = target.equipment.splice(eqIdx, 1)[0];
+        if (removed.type === 'lovers' && target.loverWith && data.players[target.loverWith]) {
+          const partner = data.players[target.loverWith];
+          const pIdx = partner.equipment.findIndex(e => e.type === 'lovers');
+          if (pIdx >= 0) partner.equipment.splice(pIdx, 1); // 另一半的情侶卡直接移除，不進棄牌堆，整場只有一張情侶卡進棄牌堆
+          partner.loverWith = null;
+          target.loverWith = null;
+          logPush(data, `${me.name} 詛咒了 ${target.name}，拆散了 ${target.name} 與 ${partner.name} 的情侶關係`);
+        } else {
+          logPush(data, `${me.name} 詛咒了 ${target.name}，丟棄了「${removed.name}」`);
+        }
+        data.discard.push(removed);
+        data.discard.push(card);
+        break;
+      }
+      case 'detain': {
+        target.skipTurns = (target.skipTurns || 0) + 1;
+        logPush(data, `${me.name} 拘留了 ${target.name}，將跳過下一回合`);
+        data.discard.push(card);
+        break;
+      }
+      case 'defend': {
+        target.accusationTotal = Math.max(0, target.accusationTotal - 3);
+        logPush(data, `${me.name} 替 ${target.name} 辯護，減少了3點審判點`);
+        data.discard.push(card);
+        break;
+      }
+      case 'shelter': case 'believer': {
+        target.equipment.push(card);
+        logPush(data, `${me.name} 讓 ${target.name} 裝備了「${card.name}」`);
+        break;
+      }
+      case 'blackcat': {
+        target.equipment.push(card);
+        logPush(data, `${me.name} 讓 ${target.name} 裝備了黑貓（起始玩家已經決定過了，這裡沒有特殊效果）`);
+        break;
+      }
+      case 'lovers': {
+        const t1 = targets[0], t2 = targets[1];
+        if (!t1 || !t2 || t1 === t2) { me.hand.splice(idx, 0, card); return alert('情侶需要選擇兩位不同的玩家'); }
+        if (data.players[t1].loverWith || data.players[t2].loverWith) { me.hand.splice(idx, 0, card); return alert('這兩位玩家其中一位已經有情侶了，情侶牌不能綁定已經配對過的人'); }
+        data.players[t1].loverWith = t2;
+        data.players[t2].loverWith = t1;
+        data.players[t1].equipment.push({ ...card, id: card.id + '_a' });
+        data.players[t2].equipment.push({ ...card, id: card.id + '_b' });
+        logPush(data, `💞 ${data.players[t1].name} 與 ${data.players[t2].name} 成為情侶`);
+        break;
+      }
+    }
+  }
+
+  data.turnHasPlayed = true;
+  // 出牌不結束回合（回合是二選一：打牌或抽兩張牌，打過牌這回合就不能再抽牌）
+  // 觸發審判時 currentTurn 維持不變、等審判翻牌完再繼續
+  const winner = checkWin(data);
+  if (winner) { data.state = 'end'; data.winner = winner; }
+  await set(roomRef(ROOM_CODE), data);
+  selectedCardId = null; selectedTargets = []; selectedSubTarget = null;
+}
+
+// ── 夜晚 ──────────────────────────────────────────────────────────────────────
+async function submitWitchProposal(pid, confirmed) {
+  await set(ref(db, `${ROOT}/${ROOM_CODE}/night/witchProposals/${MY_PID}`), { target: pid, confirmed });
+}
+async function submitSheriffProtect(pid) {
+  await set(ref(db, `${ROOT}/${ROOM_CODE}/night/sheriffProtect`), pid);
+}
+function witchConsensusTarget(data) {
+  const activeWitches = alivePids(data).filter(pid => isActiveWitch(data.players[pid]));
+  if (activeWitches.length === 0) return { ready: true, target: null };
+  const proposals = (data.night && data.night.witchProposals) || {};
+  const allConfirmed = activeWitches.every(pid => proposals[pid] && proposals[pid].confirmed);
+  if (!allConfirmed) return { ready: false, target: null };
+  const targets = new Set(activeWitches.map(pid => proposals[pid].target));
+  if (targets.size !== 1) return { ready: false, target: null };
+  return { ready: true, target: [...targets][0] };
+}
+function maybeResolveNight(data) {
+  if (nightResolving) return;
+  const activeSheriffs = alivePids(data).filter(pid => isActiveSheriff(data.players[pid]));
+  const witchResult = witchConsensusTarget(data);
+  const sheriffReady = activeSheriffs.length === 0 || !!(data.night && data.night.sheriffProtect);
+  if (witchResult.ready && sheriffReady) {
+    nightResolving = true;
+    const fresh = clone(data);
+    fresh.night = fresh.night || {};
+    fresh.night.witchTarget = witchResult.target;
+    resolveNightOutcome(fresh).finally(() => { nightResolving = false; });
+  }
+}
+async function resolveNightOutcome(data) {
+  const targetPid = data.night ? data.night.witchTarget : null;
+  if (!targetPid) {
+    reshuffleAfterNight(data);
+    data.state = 'day';
+    data.currentTurn = nextAlivePid(data, data.pendingNextTurnFrom);
+    data.turnHasPlayed = false;
+    data.pendingNextTurnFrom = null;
+    data.night = null;
+    await set(roomRef(ROOM_CODE), data);
+    return;
+  }
+  // 不管有沒有被保護，一律先進入自首階段（全員盲選），保護結果留到那之後才揭曉
+  // 這樣其他人無法從「有沒有跳過自首階段」反推出保護是否成功
+  data.state = 'night_confess';
+  data.nightConfessChoices = {};
+  logPush(data, '🔪 夜晚結果即將公布...');
+  await set(roomRef(ROOM_CODE), data);
+}
+async function submitNightConfess(choice) {
+  await set(ref(db, `${ROOT}/${ROOM_CODE}/nightConfessChoices/${MY_PID}`), choice);
+}
+function maybeResolveNightConfess(data) {
+  if (nightResolving) return;
+  const protectedPid = data.night && data.night.sheriffProtect;
+  const ready = alivePids(data).every(pid => pid === protectedPid || (data.nightConfessChoices && data.nightConfessChoices[pid] !== undefined));
+  if (!ready) return;
+  nightResolving = true;
+  resolveNightConfessOutcome(clone(data)).finally(() => { nightResolving = false; });
+}
+async function resolveNightConfessOutcome(data) {
+  const targetPid = data.night.witchTarget;
+  const target = data.players[targetPid];
+  const protectedBySheriff = data.night.sheriffProtect === targetPid;
+  const hasShelter = target.equipment.some(e => e.type === 'shelter');
+  const confessed = !!(data.nightConfessChoices && data.nightConfessChoices[targetPid]);
+  data.nightConfessChoices = {};
+  data.night = null;
+  if (protectedBySheriff || hasShelter) {
+    logPush(data, `🛡 ${target.name} 受到保護，平安度過夜晚`);
+    reshuffleAfterNight(data);
+    data.state = 'day';
+    data.currentTurn = nextAlivePid(data, data.pendingNextTurnFrom);
+    data.turnHasPlayed = false;
+    data.pendingNextTurnFrom = null;
+  } else if (confessed) {
+    logPush(data, `🔪 ${target.name} 在夜裡遭到襲擊，選擇了自首！`);
+    data.state = 'awaiting_reveal';
+    data.reveal = { targetPid, cause: 'night' };
+  } else {
+    logPush(data, `🔪 ${target.name} 在夜裡遭到襲擊，沒有自首...`);
+    applyDeath(data, targetPid);
+    stripBlueCardsAtTwoPlayers(data);
+    reshuffleAfterNight(data);
+    const winner = checkWin(data);
+    if (winner) {
+      data.state = 'end'; data.winner = winner;
+    } else {
+      data.state = 'day';
+      data.currentTurn = nextAlivePid(data, data.pendingNextTurnFrom);
+      data.turnHasPlayed = false;
+      data.pendingNextTurnFrom = null;
+    }
+  }
+  await set(roomRef(ROOM_CODE), data);
+}
+
+// ── 強制翻牌（審判 / 夜晚自首 / 黑貓） ────────────────────────────────────────
+function revealChooserPid(reveal) {
+  return reveal.cause === 'trial' ? reveal.triggeredByPid : reveal.targetPid;
+}
+async function resolveReveal(cardIndex) {
+  const data = clone(lastRoomData);
+  if (!data.reveal || revealChooserPid(data.reveal) !== MY_PID) return;
+  const targetPid = data.reveal.targetPid;
+  const target = data.players[targetPid];
+  const cause = data.reveal.cause;
+  const nextState = data.reveal.nextState;
+  const ok = forceReveal(data, targetPid, cardIndex);
+  if (!ok) return;
+  if (cause === 'trial') { target.accusationTotal = 0; target.accusationCards = []; }
+  stripBlueCardsAtTwoPlayers(data);
+  data.reveal = null;
+  const winner = checkWin(data);
+  if (winner) {
+    data.state = 'end'; data.winner = winner;
+    await set(roomRef(ROOM_CODE), data);
+    return;
+  }
+  if (nextState === 'contagion_pick') {
+    data.state = 'contagion_pick';
+    data.contagionPicks = {};
+    logPush(data, '☣ 接下來所有玩家請選擇從前一位玩家取得一張身份卡');
+  } else if (cause === 'night') {
+    reshuffleAfterNight(data);
+    data.state = 'day';
+    data.currentTurn = nextAlivePid(data, data.pendingNextTurnFrom);
+    data.turnHasPlayed = false;
+    data.pendingNextTurnFrom = null;
+  } else {
+    // trial：回到觸發審判的玩家手上繼續他的回合（出牌不結束回合）
+    data.state = 'day';
+    data.currentTurn = data.pendingNextTurnFrom || MY_PID;
+    data.pendingNextTurnFrom = null;
+  }
+  await set(roomRef(ROOM_CODE), data);
+}
+
+// ── Render: Home ──────────────────────────────────────────────────────────────
+function renderHome() {
+  setBg('home');
+  render(`
+    <img src="assets/title-logo.jpg" style="display:block;width:100%;max-width:320px;margin:0 auto 8px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.5)">
+    <div class="subtitle">Salem 1692 · 線上版</div>
+    <div class="card">
+      <input type="text" id="nameInput" placeholder="你的名字" value="${MY_NAME}">
+      <button class="btn-primary" id="btnCreate">建立房間</button>
+    </div>
+    <div class="card">
+      <input type="text" id="codeInput" placeholder="輸入房號" style="text-transform:uppercase">
+      <button class="btn-primary" id="btnJoin">加入房間</button>
+    </div>
+    <button class="btn-secondary" id="btnRules">📖 卡牌說明</button>
+  `);
+  el('btnCreate').onclick = createRoom;
+  el('btnJoin').onclick = () => joinRoom();
+  el('btnRules').onclick = toggleRules;
+}
+
+// ── Render: Lobby ─────────────────────────────────────────────────────────────
+function renderLobby(data) {
+  setBg('lobby');
+  const isHost = data.hostPid === MY_PID;
+  const n = data.turnOrder.length;
+  render(`
+    <h1>🕯 獵巫鎮</h1>
+    <div class="roomcode">${ROOM_CODE}</div>
+    <div class="subtitle center">把房號分享給朋友一起加入</div>
+    <div class="card">
+      <h2>玩家 (${n}/12)</h2>
+      ${data.turnOrder.map(pid => `<div class="player-row"><span class="player-name">${data.players[pid].name}${pid === data.hostPid ? ' 👑' : ''}${pid === MY_PID ? '（你）' : ''}</span></div>`).join('')}
+    </div>
+    ${isHost
+      ? `<button class="btn-primary" id="btnStart" ${n < 4 ? 'disabled' : ''}>開始遊戲${n < 4 ? '（至少4人）' : ''}</button>`
+      : `<div class="muted center">等待房主開始遊戲...</div>`}
+    <div class="center" style="margin-top:10px">
+      <button class="btn-secondary btn-sm" id="btnLeave">離開房間</button>
+      <button class="btn-secondary btn-sm" id="btnRules">📖 卡牌說明</button>
+    </div>
+  `);
+  if (isHost) el('btnStart').onclick = startGame;
+  el('btnLeave').onclick = leaveToHome;
+  el('btnRules').onclick = toggleRules;
+}
+
+// ── 共用：玩家列表 ────────────────────────────────────────────────────────────
+function renderPlayerList(data, opts = {}) {
+  return data.turnOrder.map(pid => {
+    const p = data.players[pid];
+    const hiddenCount = p.identityCards.filter(c => !c.revealed).length;
+    const revealedChips = p.identityCards.filter(c => c.revealed).map(c => identityPill(c.type)).join('');
+    const hiddenChip = hiddenCount > 0 ? `<span class="pill hidden">🂠×${hiddenCount}</span>` : '';
+    const handCountChip = p.alive ? `<span class="pill hidden" title="手牌數">✋${p.hand.length}</span>` : '';
+    const equip = p.equipment.map(e => {
+      const extra = (e.type === 'lovers' && p.loverWith && data.players[p.loverWith]) ? `(與${data.players[p.loverWith].name})` : '';
+      return `<span class="pill" style="background:var(--c-blue)">${e.name}${extra}</span>`;
+    }).join('');
+    const accuse = p.accusationTotal > 0 ? `<span class="accuse-bar"><span class="accuse-fill" style="width:${Math.min(100, p.accusationTotal / 7 * 100)}%"></span></span><span class="muted" style="font-size:0.72rem">${p.accusationTotal}/7</span>` : '';
+    const classes = ['player-row'];
+    if (pid === MY_PID) classes.push('me');
+    if (data.currentTurn === pid) classes.push('turn');
+    const clickable = opts.onClickPid ? `data-pid="${pid}"` : '';
+    return `<div class="${classes.join(' ')}" ${clickable}>
+      <span class="player-name">${p.alive ? '' : '💀'} ${p.name}${pid === MY_PID ? '（你）' : ''}</span>
+      <span>${revealedChips}${hiddenChip}${handCountChip}${equip}${accuse}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Render: Day ───────────────────────────────────────────────────────────────
+function renderDay(data) {
+  setBg('day');
+  const me = data.players[MY_PID];
+  const myTurn = data.currentTurn === MY_PID;
+  const witchTeammates = isWitchTeam(me) ? data.turnOrder.filter(pid => pid !== MY_PID && isWitchTeam(data.players[pid])).map(pid => data.players[pid].name) : [];
+
+  const myIdentityChips = me.identityCards.map((c, i) => identityPill(c.type, c.revealed ? '(已公開)' : '')).join('');
+
+  const handHtml = me.hand.map(c => {
+    const isSelected = selectedCardId === c.id;
+    return `<div class="gamecard ${c.color} ${isSelected ? 'selected' : ''}" data-card="${c.id}">
+      <img src="${CARD_IMG[c.color]}">
+      <span class="nm">${c.name}${c.value ? ' ' + c.value : ''}</span>
+    </div>`;
+  }).join('') || '<span class="muted">（沒有手牌）</span>';
+
+  const selectedCard = me.hand.find(c => c.id === selectedCardId);
+  let targetPickerHtml = '';
+  let needSubTarget = false;
+  if (selectedCard) {
+    const need = (selectedCard.type === 'lovers' || selectedCard.type === 'frame' || selectedCard.type === 'rob') ? 2 : 1;
+    const candidates = data.turnOrder.filter(pid => data.players[pid].alive && pid !== MY_PID);
+    const targetsChosen = selectedTargets.length >= need;
+    let subPickerHtml = '';
+    if (selectedCard.type === 'curse' && targetsChosen) {
+      const curseTarget = data.players[selectedTargets[0]];
+      if (curseTarget.equipment.length > 1) {
+        needSubTarget = true;
+        subPickerHtml = `<div style="width:100%;font-size:0.78rem;color:var(--dim);margin-top:6px">選擇要丟棄 ${curseTarget.name} 的哪一張裝備：</div>
+          ${curseTarget.equipment.map(e => `<span class="target-btn ${selectedSubTarget === e.id ? 'picked' : ''}" data-subtarget="${e.id}">${e.name}</span>`).join('')}`;
+      }
+    }
+    const canConfirm = targetsChosen && !(needSubTarget && !selectedSubTarget);
+    targetPickerHtml = `<div class="target-picker">
+      <div style="width:100%;font-size:0.78rem;color:var(--dim)">${selectedCard.desc || '選擇目標'}（需選 ${need} 位，已選 ${selectedTargets.length}）</div>
+      ${candidates.map(pid => `<span class="target-btn ${selectedTargets.includes(pid) ? 'picked' : ''}" data-target="${pid}">${data.players[pid].name}</span>`).join('')}
+      ${subPickerHtml}
+      <button class="btn-primary btn-sm" id="btnConfirmPlay" ${canConfirm ? '' : 'disabled'} style="width:auto">出牌</button>
+      <button class="btn-secondary btn-sm" id="btnCancelPlay" style="width:auto">取消</button>
+    </div>`;
+  }
+
+  render(`
+    <h1>🕯 獵巫鎮</h1>
+    <div class="subtitle center">房號 ${ROOM_CODE}　·　剩餘牌堆 ${data.deck.length} 張</div>
+    <div class="center" style="margin-bottom:8px"><button class="btn-secondary btn-sm" id="btnRules" style="width:auto">📖 卡牌說明</button></div>
+    <div class="log">${(data.log || []).slice(-10).map(t => `<div>${t}</div>`).join('')}</div>
+    <div class="card">
+      <h2>玩家</h2>
+      ${renderPlayerList(data)}
+    </div>
+    <div class="card ${isWitchTeam(me) ? 'witch' : ''}">
+      <h3>你的身份卡</h3>
+      <div class="row">${myIdentityChips}</div>
+      ${witchTeammates.length ? `<div class="muted" style="margin-top:6px">🔮 你的女巫同夥：${witchTeammates.join('、')}</div>` : ''}
+    </div>
+    <div class="card">
+      <h3>${myTurn ? (data.turnHasPlayed ? '輪到你了！這回合已出過牌，可以繼續出牌或結束回合' : '輪到你了！打牌或抽兩張牌，二選一') : `等待 ${name(data, data.currentTurn)} 的回合...`}</h3>
+      ${myTurn && !data.turnHasPlayed ? `<button class="btn-primary" id="btnDraw">抽兩張牌（結束回合）</button>` : ''}
+      ${myTurn && data.turnHasPlayed ? `<button class="btn-primary" id="btnEndTurn">結束回合</button>` : ''}
+      <div class="row" style="margin-top:8px">${handHtml}</div>
+      ${myTurn ? targetPickerHtml : ''}
+    </div>
+  `);
+
+  el('btnRules').onclick = toggleRules;
+  if (myTurn && !data.turnHasPlayed) {
+    el('btnDraw').onclick = drawTwo;
+  }
+  if (myTurn && data.turnHasPlayed) {
+    el('btnEndTurn').onclick = endTurn;
+  }
+  if (myTurn) {
+    el('app').querySelectorAll('[data-card]').forEach(elm => {
+      elm.onclick = () => { selectedCardId = elm.getAttribute('data-card'); selectedTargets = []; selectedSubTarget = null; renderDay(lastRoomData); };
+    });
+    const cancelBtn = el('btnCancelPlay');
+    if (cancelBtn) cancelBtn.onclick = () => { selectedCardId = null; selectedTargets = []; selectedSubTarget = null; renderDay(lastRoomData); };
+    el('app').querySelectorAll('[data-target]').forEach(elm => {
+      elm.onclick = () => {
+        const pid = elm.getAttribute('data-target');
+        const need = (selectedCard.type === 'lovers' || selectedCard.type === 'frame' || selectedCard.type === 'rob') ? 2 : 1;
+        if (selectedTargets.includes(pid)) selectedTargets = selectedTargets.filter(x => x !== pid);
+        else if (selectedTargets.length < need) selectedTargets.push(pid);
+        selectedSubTarget = null;
+        renderDay(lastRoomData);
+      };
+    });
+    el('app').querySelectorAll('[data-subtarget]').forEach(elm => {
+      elm.onclick = () => { selectedSubTarget = elm.getAttribute('data-subtarget'); renderDay(lastRoomData); };
+    });
+    const confirmBtn = el('btnConfirmPlay');
+    if (confirmBtn) confirmBtn.onclick = () => playCard(selectedCardId, selectedTargets, selectedSubTarget);
+  }
+}
+
+// ── Render: Night ─────────────────────────────────────────────────────────────
+let pendingWitchTarget = null;
+let pendingSheriffProtect = null;
+function renderNight(data) {
+  setBg('night');
+  const me = data.players[MY_PID];
+  const amWitch = isActiveWitch(me);
+  const amSheriff = isActiveSheriff(me);
+  const witchTargets = alivePids(data);
+  const sheriffTargets = alivePids(data).filter(pid => pid !== MY_PID);
+  const activeWitches = alivePids(data).filter(pid => isActiveWitch(data.players[pid]));
+  const proposals = (data.night && data.night.witchProposals) || {};
+  const sheriffDone = !!(data.night && data.night.sheriffProtect);
+  if (!proposals[MY_PID]) { pendingWitchTarget = null; } // 新一輪夜晚，清掉上一輪殘留的本地選取
+  if (Object.keys(proposals).length === 0 && !sheriffDone) { pendingSheriffProtect = null; }
+
+  let actionHtml = '';
+  if (amWitch) {
+    const myProposal = proposals[MY_PID];
+    const myPick = pendingWitchTarget !== null ? pendingWitchTarget : (myProposal ? myProposal.target : null);
+    const myConfirmed = myProposal && myProposal.confirmed && myPick === myProposal.target;
+    const statusRows = activeWitches.map(pid => {
+      const p = proposals[pid];
+      const label = p ? `選擇了 ${data.players[p.target].name}${p.confirmed ? ' ✓已確定' : '（尚未確定）'}` : '尚未選擇';
+      return `<div class="muted">🔮 ${data.players[pid].name}${pid === MY_PID ? '（你）' : ''}：${label}</div>`;
+    }).join('');
+    actionHtml += `<h3>🔮 獵殺目標（所有女巫都要選擇並確定，最後目標須一致）</h3>
+      ${statusRows}
+      <div class="target-picker" style="margin-top:8px">${witchTargets.map(pid => `<span class="target-btn ${myPick === pid ? 'picked' : ''}" data-wt="${pid}">${data.players[pid].name}</span>`).join('')}</div>
+      <button class="btn-primary btn-sm" id="btnConfirmWt" ${(myPick && !myConfirmed) ? '' : 'disabled'} style="width:auto">確定目標</button>`;
+  }
+  if (amSheriff) {
+    if (sheriffDone) {
+      actionHtml += `<h3>🛡 保護對象已確定</h3><div class="muted">已選擇：${data.players[data.night.sheriffProtect].name}（等待其他階段完成）</div>`;
+    } else {
+      actionHtml += `<h3>🛡 選擇今晚要保護的玩家</h3>
+        <div class="target-picker">${sheriffTargets.map(pid => `<span class="target-btn ${pendingSheriffProtect === pid ? 'picked' : ''}" data-sp="${pid}">${data.players[pid].name}</span>`).join('')}</div>
+        <button class="btn-primary btn-sm" id="btnConfirmSp" ${pendingSheriffProtect ? '' : 'disabled'} style="width:auto">確定保護</button>`;
+    }
+  }
+  if (!actionHtml) actionHtml = '<div class="muted center">🌙 夜晚降臨，所有人閉眼等待...</div>';
+
+  render(`
+    <h1>🕯 獵巫鎮</h1>
+    <div class="card">
+      <div class="muted">警長已放置保護：${sheriffDone ? '✓' : '…'}</div>
+    </div>
+    <div class="card">${actionHtml}</div>
+  `);
+
+  if (amWitch) {
+    el('app').querySelectorAll('[data-wt]').forEach(elm => elm.onclick = () => {
+      pendingWitchTarget = elm.getAttribute('data-wt');
+      submitWitchProposal(pendingWitchTarget, false);
+      renderNight(lastRoomData);
+    });
+    const btn = el('btnConfirmWt');
+    if (btn) btn.onclick = () => { submitWitchProposal(pendingWitchTarget, true); };
+  }
+  if (amSheriff && !sheriffDone) {
+    el('app').querySelectorAll('[data-sp]').forEach(elm => elm.onclick = () => { pendingSheriffProtect = elm.getAttribute('data-sp'); renderNight(lastRoomData); });
+    el('btnConfirmSp').onclick = () => { submitSheriffProtect(pendingSheriffProtect); pendingSheriffProtect = null; };
+  }
+}
+
+// ── Render: Awaiting Reveal ───────────────────────────────────────────────────
+function renderAwaitingReveal(data) {
+  setBg(data.reveal.cause === 'trial' ? 'trial' : data.reveal.cause === 'blackcat' ? 'contagion' : 'night');
+  const cause = data.reveal.cause;
+  const causeText = { trial: '指控達到7點，被送上審判台', night: '自首了，選擇要翻開哪一張身份卡', blackcat: '傳染事件發生，黑貓持有者必須翻牌' }[cause];
+  const target = data.players[data.reveal.targetPid];
+  const chooserPid = revealChooserPid(data.reveal);
+  const isChooser = chooserPid === MY_PID;
+  const isTarget = data.reveal.targetPid === MY_PID;
+  const blind = cause === 'trial'; // 審判由指控人盲選，不知道內容
+
+  let body;
+  if (isChooser) {
+    const hiddenIdx = target.identityCards.map((c, i) => ({ c, i })).filter(x => !x.c.revealed);
+    const options = blind
+      ? hiddenIdx.map((x, n) => `<button class="btn-secondary btn-sm" data-flip="${x.i}">第${n + 1}張</button>`).join('')
+      : hiddenIdx.map(x => `<button class="btn-secondary btn-sm" data-flip="${x.i}"><img src="${IDENTITY_IMG[x.c.type]}" style="width:34px;height:34px;border-radius:50%;vertical-align:middle;margin-right:6px;object-fit:cover">${IDENTITY_LABEL[x.c.type]}</button>`).join('');
+    const who = isTarget ? '你自己' : `${target.name}`;
+    body = `<div class="card danger"><h3>⚖ ${target.name} ${causeText}</h3><div class="muted">選擇要翻開${who}的哪一張身份卡：</div><div class="row" style="margin-top:8px">${options}</div></div>`;
+  } else {
+    body = `<div class="card danger"><h3>⚖ ${target.name} — ${causeText}</h3><div class="muted">等待 ${data.players[chooserPid].name} 選擇要翻開哪一張身份卡...</div></div>`;
+  }
+
+  render(`<h1>🕯 獵巫鎮</h1>${body}`);
+  if (isChooser) {
+    el('app').querySelectorAll('[data-flip]').forEach(elm => elm.onclick = () => resolveReveal(parseInt(elm.getAttribute('data-flip'))));
+  }
+}
+
+// ── Render: 夜晚結果公布 — 全員盲選自首與否 ────────────────────────────────────
+function renderNightConfess(data) {
+  setBg('night');
+  const protectedPid = data.night && data.night.sheriffProtect;
+  const iAmProtected = protectedPid && protectedPid === MY_PID;
+  const mySubmitted = iAmProtected || (data.nightConfessChoices && data.nightConfessChoices[MY_PID] !== undefined);
+  const doneList = alivePids(data).map(pid => {
+    const submitted = pid === protectedPid || (data.nightConfessChoices && data.nightConfessChoices[pid] !== undefined);
+    return `${data.players[pid].name}${submitted ? '✓' : '…'}`;
+  }).join('　');
+  const protectText = protectedPid ? `<div class="muted" style="margin-bottom:6px">🛡 警長保護了：${data.players[protectedPid].name}（此人不用選擇自首）</div>` : '';
+
+  let body;
+  if (iAmProtected) {
+    body = `<div class="muted center">警長保護了你，這輪你不需要選擇，安心等待結果</div>`;
+  } else if (mySubmitted) {
+    body = `<div class="muted center">已提交，等待其他人選擇...</div>`;
+  } else {
+    body = `<h3>🔪 夜晚結果即將公布</h3>
+      <div class="muted">除了被警長保護的人以外，你不知道女巫選了誰。要自首嗎？如果你就是被選中的人：自首可以自己選一張身份卡翻開、免於直接死亡；不自首的話，被選中就會直接死亡。</div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn-primary btn-sm" id="btnConfess" style="width:auto">自首</button>
+        <button class="btn-danger btn-sm" id="btnDecline" style="width:auto">不自首</button>
+      </div>`;
+  }
+
+  render(`
+    <h1>🕯 獵巫鎮</h1>
+    <div class="card">${protectText}<div class="muted">${doneList}</div></div>
+    <div class="card">${body}</div>
+  `);
+  if (!mySubmitted && !iAmProtected) {
+    el('btnConfess').onclick = () => submitNightConfess(true);
+    el('btnDecline').onclick = () => submitNightConfess(false);
+  }
+}
+
+// ── Render: 指定黑貓持有者（起始玩家） ────────────────────────────────────────
+function renderAssignBlackcat(data) {
+  setBg('blackcat');
+  const me = data.players[MY_PID];
+  const canPick = isWitchTeam(me);
+  const done = !!data.blackcatPick;
+  let body;
+  if (canPick) {
+    body = `<h3>🐈‍⬛ 請選擇一位玩家放置黑貓（他將成為起始玩家）</h3>
+      <div class="target-picker">${data.turnOrder.map(pid => `<span class="target-btn ${data.blackcatPick === pid ? 'picked' : ''}" data-bc="${pid}">${data.players[pid].name}</span>`).join('')}</div>`;
+  } else {
+    body = `<div class="muted center">🐈‍⬛ 女巫方正在選擇黑貓持有者（起始玩家）...</div>`;
+  }
+  render(`
+    <h1>🕯 獵巫鎮</h1>
+    <img class="scene-portrait" src="assets/blackcat-portrait.jpg">
+    <div class="card ${isWitchTeam(me) ? 'witch' : ''}">
+      <h3>你的身份卡</h3>
+      <div class="row">${me.identityCards.map(c => identityPill(c.type)).join('')}</div>
+    </div>
+    <div class="card">${body}${done ? `<div class="muted" style="margin-top:8px">已選擇：${data.players[data.blackcatPick].name}</div>` : ''}</div>
+  `);
+  if (canPick) el('app').querySelectorAll('[data-bc]').forEach(elm => elm.onclick = () => submitBlackcatPick(elm.getAttribute('data-bc')));
+}
+
+// ── Render: 傳染 — 全員選擇從前一位玩家取得一張身份卡 ─────────────────────────
+let pendingContagionPick = null;
+function renderContagionPick(data) {
+  setBg('contagion');
+  const predPid = contagionPredecessor(data, MY_PID);
+  const predUnrevealed = predPid ? data.players[predPid].identityCards.filter(c => !c.revealed).length : 0;
+  const alreadySubmitted = data.contagionPicks && data.contagionPicks[MY_PID] !== undefined;
+  const doneList = data.turnOrder.filter(pid => data.players[pid].alive).map(pid => {
+    const pp = contagionPredecessor(data, pid);
+    const ppUnrevealed = pp ? data.players[pp].identityCards.filter(c => !c.revealed).length : 0;
+    const submitted = ppUnrevealed === 0 || (data.contagionPicks && data.contagionPicks[pid] !== undefined);
+    return `${data.players[pid].name}${submitted ? '✓' : '…'}`;
+  }).join('　');
+
+  let body;
+  if (predUnrevealed === 0) {
+    body = `<div class="muted center">前一位玩家（${predPid ? data.players[predPid].name : '?'}）沒有可選的身份卡，你自動略過這一步</div>`;
+  } else if (alreadySubmitted) {
+    body = `<div class="muted center">已確定選擇，等待其他人...</div>`;
+  } else {
+    const options = Array.from({ length: predUnrevealed }, (_, n) => `<span class="target-btn ${pendingContagionPick === n ? 'picked' : ''}" data-cp="${n}">第${n + 1}張</span>`).join('');
+    body = `<h3>☣ 選擇從 ${data.players[predPid].name} 那裡取得哪一張身份卡</h3>
+      <div class="target-picker">${options}</div>
+      <button class="btn-primary btn-sm" id="btnConfirmCp" ${pendingContagionPick !== null ? '' : 'disabled'} style="width:auto">確定選擇</button>`;
+  }
+
+  render(`
+    <h1>🕯 獵巫鎮</h1>
+    <div class="card"><div class="muted">${doneList}</div></div>
+    <div class="card">${body}</div>
+  `);
+  if (predUnrevealed > 0 && !alreadySubmitted) {
+    el('app').querySelectorAll('[data-cp]').forEach(elm => elm.onclick = () => { pendingContagionPick = parseInt(elm.getAttribute('data-cp')); renderContagionPick(lastRoomData); });
+    el('btnConfirmCp').onclick = () => { submitContagionPick(pendingContagionPick); pendingContagionPick = null; };
+  }
+}
+
+// ── Render: End ───────────────────────────────────────────────────────────────
+function renderEnd(data) {
+  setBg(data.winner === 'villager' ? 'end-villager' : 'end-witch');
+  const isHost = data.hostPid === MY_PID;
+  const witchSide = data.turnOrder.filter(pid => isWitchTeam(data.players[pid]));
+  const goodSide = data.turnOrder.filter(pid => !isWitchTeam(data.players[pid]));
+  const rosterRow = pid => {
+    const p = data.players[pid];
+    return `<div class="player-row"><span class="player-name">${p.alive ? '' : '💀'} ${p.name}</span><span>${p.identityCards.map(c => identityPill(c.type)).join('')}</span></div>`;
+  };
+  render(`
+    <h1>🕯 獵巫鎮</h1>
+    <div class="banner ${data.winner}">${data.winner === 'villager' ? '🕊 村民勝利！' : '🔮 女巫勝利！'}</div>
+    <div class="card witch">
+      <h2>🔮 女巫陣營</h2>
+      ${witchSide.length ? witchSide.map(rosterRow).join('') : '<div class="muted">（無）</div>'}
+    </div>
+    <div class="card">
+      <h2>🕊 好人陣營</h2>
+      ${goodSide.length ? goodSide.map(rosterRow).join('') : '<div class="muted">（無）</div>'}
+    </div>
+    ${isHost ? `<button class="btn-primary" id="btnAgain">回到大廳再玩一次</button>` : `<div class="muted center">等待房主重新開始...</div>`}
+  `);
+  if (isHost) el('btnAgain').onclick = returnToLobby;
+}
+
+// ── Render: 卡牌說明 ──────────────────────────────────────────────────────────
+let showingRules = false;
+function toggleRules() {
+  showingRules = !showingRules;
+  if (showingRules) renderCardRules();
+  else if (lastRoomData) renderState(lastRoomData);
+  else renderHome();
+}
+const COLOR_NAME = { black: '黑卡（事件）', blue: '藍卡（裝備，持續生效，不可對自己使用；只剩兩名玩家時所有藍卡會直接移除遊戲）', green: '綠卡（一次性效果，不可對自己使用）', red: '紅卡（指控，累計7點觸發審判，不可對自己使用）' };
+function renderCardRules() {
+  const sections = ['black', 'blue', 'green', 'red'].map(color => {
+    const items = CARD_DEFS[color].map(def => `
+      <div class="player-row" style="align-items:flex-start">
+        <span style="min-width:78px"><img src="${CARD_IMG[color]}" style="width:32px;height:32px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px">${def.name}${def.value ? ' ' + def.value : ''}</span>
+        <span class="muted" style="flex:1">${def.desc || ''}（共${def.count}張）</span>
+      </div>`).join('');
+    return `<div class="card ${color}"><h3>${COLOR_NAME[color]}</h3>${items}</div>`;
+  }).join('');
+  const identitySections = `
+    <div class="card">
+      <h3>身份卡</h3>
+      <div class="player-row" style="align-items:flex-start">${identityPill('sheriff')}<span class="muted" style="flex:1">可使用槌子（保護）保護一名玩家，但不能保護自己；若身份卡被翻開就失去警長能力（能力跟著卡片走，卡片被嫁禍/傳染轉移出去，新持有者才是警長）</span></div>
+      <div class="player-row" style="align-items:flex-start">${identityPill('witch')}<span class="muted" style="flex:1">加入女巫陣營，可以互相得知彼此身份；夜晚共同選定一名玩家獵殺（可以選自己或其他女巫）。一旦成為過女巫就永遠是女巫陣營，即使身上女巫卡被傳染轉移走也一樣</span></div>
+      <div class="player-row" style="align-items:flex-start">${identityPill('villager')}<span class="muted" style="flex:1">沒有特殊能力，跟其他村民一起找出所有女巫</span></div>
+    </div>
+    <div class="card">
+      <h3>勝負條件</h3>
+      <div class="muted">村民勝利：全場所有女巫身份卡都被翻開（不需要女巫死亡）</div>
+      <div class="muted" style="margin-top:4px">女巫勝利：所有非女巫陣營玩家都死亡</div>
+    </div>`;
+  render(`
+    <h1>🕯 獵巫鎮</h1>
+    <div class="subtitle center">卡牌說明</div>
+    ${identitySections}
+    ${sections}
+    <button class="btn-primary" id="btnCloseRules">返回</button>
+  `);
+  el('btnCloseRules').onclick = toggleRules;
+}
+
+// ── State dispatcher ──────────────────────────────────────────────────────────
+function renderState(data) {
+  if (showingRules) { renderCardRules(); return; }
+  switch (data.state) {
+    case 'lobby': renderLobby(data); break;
+    case 'assign_blackcat': renderAssignBlackcat(data); if (data.hostPid === MY_PID) maybeResolveBlackcatPick(data); break;
+    case 'day': renderDay(data); break;
+    case 'night': renderNight(data); if (data.hostPid === MY_PID) maybeResolveNight(data); break;
+    case 'night_confess': renderNightConfess(data); if (data.hostPid === MY_PID) maybeResolveNightConfess(data); break;
+    case 'contagion_pick': renderContagionPick(data); if (data.hostPid === MY_PID) maybeResolveContagion(data); break;
+    case 'awaiting_reveal': renderAwaitingReveal(data); break;
+    case 'end': renderEnd(data); break;
+    default: renderHome();
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+(async function boot() {
+  if (ROOM_CODE) {
+    try {
+      const snap = await get(roomRef(ROOM_CODE));
+      if (snap.exists() && snap.val().players && snap.val().players[MY_PID]) {
+        subscribe();
+        return;
+      }
+    } catch (e) {}
+    sessionStorage.removeItem('salem_room');
+    ROOM_CODE = '';
+  }
+  renderHome();
+})();
+</script>
+</body>
+</html>
