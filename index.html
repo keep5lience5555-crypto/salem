@@ -187,7 +187,14 @@ const CHARACTER_DEFS = {
 const IDENTITY_LABEL = { witch: '女巫', sheriff: '警長', villager: '村民' };
 const IDENTITY_CLASS = { witch: 'witch', sheriff: 'sheriff', villager: 'villager' };
 const IDENTITY_IMG = { witch: 'assets/witch.jpg', sheriff: 'assets/sheriff.jpg', villager: 'assets/villager.jpg' };
-const CARD_IMG = { black: 'assets/card-black.jpg', blue: 'assets/card-blue.jpg', green: 'assets/card-green.jpg', red: 'assets/card-red.jpg' };
+const CARD_COLOR_IMG = { black: 'assets/card-black.jpg', blue: 'assets/card-blue.jpg', green: 'assets/card-green.jpg', red: 'assets/card-red.jpg' };
+const CARD_TYPE_IMG = {
+  contagion: 'assets/card-contagion.jpg', night: 'assets/card-night.jpg',
+  blackcat: 'assets/card-blackcat.jpg', lovers: 'assets/card-lovers.jpg', shelter: 'assets/card-shelter.jpg', believer: 'assets/card-believer.jpg',
+  frame: 'assets/card-frame.jpg', rob: 'assets/card-rob.jpg', arson: 'assets/card-arson.jpg', curse: 'assets/card-curse.jpg', detain: 'assets/card-detain.jpg', defend: 'assets/card-defend.jpg',
+  accuse: 'assets/card-accuse.jpg', evidence: 'assets/card-evidence.jpg', witness: 'assets/card-witness.jpg',
+};
+function cardImg(card) { return CARD_TYPE_IMG[card.type] || CARD_COLOR_IMG[card.color]; }
 function identityPill(type, extra) {
   return `<span class="pill ${IDENTITY_CLASS[type]}"><img src="${IDENTITY_IMG[type]}">${IDENTITY_LABEL[type]}${extra || ''}</span>`;
 }
@@ -1073,7 +1080,7 @@ function renderDay(data) {
   const handHtml = me.hand.map(c => {
     const isSelected = selectedCardId === c.id;
     return `<div class="gamecard ${c.color} ${isSelected ? 'selected' : ''}" data-card="${c.id}">
-      <img src="${CARD_IMG[c.color]}">
+      <img src="${cardImg(c)}">
       <span class="nm">${c.name}${c.value ? ' ' + c.value : ''}</span>
     </div>`;
   }).join('') || '<span class="muted">（沒有手牌）</span>';
@@ -1402,7 +1409,7 @@ function renderCardRules() {
   const sections = ['black', 'blue', 'green', 'red'].map(color => {
     const items = CARD_DEFS[color].map(def => `
       <div class="player-row" style="align-items:flex-start">
-        <span style="min-width:78px"><img src="${CARD_IMG[color]}" style="width:32px;height:32px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px">${def.name}${def.value ? ' ' + def.value : ''}</span>
+        <span style="min-width:78px"><img src="${CARD_TYPE_IMG[def.type] || CARD_COLOR_IMG[color]}" style="width:32px;height:32px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px">${def.name}${def.value ? ' ' + def.value : ''}</span>
         <span class="muted" style="flex:1">${def.desc || ''}（共${def.count}張）</span>
       </div>`).join('');
     return `<div class="card ${color}"><h3>${COLOR_NAME[color]}</h3>${items}</div>`;
