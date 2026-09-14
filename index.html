@@ -513,7 +513,11 @@ function applyDeath(data, pid) {
   p.identityCards.forEach(c => c.revealed = true);
   logPush(data, `☠ ${p.name} 死亡，身份公開：${p.identityCards.map(c => IDENTITY_LABEL[c.type]).join('、')}`);
   if (p.loverWith && data.players[p.loverWith] && data.players[p.loverWith].alive) {
-    logPush(data, `💔 ${data.players[p.loverWith].name} 因情侶殉情而死`);
+    const partner = data.players[p.loverWith];
+    // 整場遊戲情侶牌算作1張：另一半身上的情侶裝備卡直接移除，不再重複進農民手牌或棄牌堆
+    const li = partner.equipment.findIndex(e => e.type === 'lovers');
+    if (li >= 0) partner.equipment.splice(li, 1);
+    logPush(data, `💔 ${partner.name} 因情侶殉情而死`);
     applyDeath(data, p.loverWith);
   }
 }
@@ -1301,7 +1305,7 @@ function renderAwaitingReveal(data) {
   const chooserPid = revealChooserPid(data.reveal);
   const isChooser = chooserPid === MY_PID;
   const isTarget = data.reveal.targetPid === MY_PID;
-  const blind = cause === 'trial'; // 審判由指控人盲選，不知道內容
+  const blind = cause === 'trial' || cause === 'blackcat'; // 審判/傳染都是盲選，選的人不知道翻到的是什麼身份
 
   let body;
   if (isChooser) {
