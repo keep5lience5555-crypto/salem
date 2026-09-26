@@ -1124,6 +1124,7 @@ function renderPlayerList(data, opts = {}) {
     const hiddenCount = p.identityCards.filter(c => !c.revealed).length;
     const revealedChips = p.identityCards.filter(c => c.revealed).map(c => identityPill(c.type)).join('');
     const hiddenChip = hiddenCount > 0 ? `<span class="pill hidden">🂠×${hiddenCount}</span>` : '';
+    const roleChip = p.characterRole ? `<span class="pill" style="background:#5a4520;color:#f3dfb0" title="${CHARACTER_DEFS[p.characterRole.type].desc}">🎭${CHARACTER_DEFS[p.characterRole.type].name}</span>` : '';
     const handCountChip = p.alive ? `<span class="pill hidden" title="手牌數">✋${p.hand.length}</span>` : '';
     const equip = p.equipment.map(e => {
       const extra = (e.type === 'lovers' && p.loverWith && data.players[p.loverWith]) ? `(與${data.players[p.loverWith].name})` : '';
@@ -1136,7 +1137,7 @@ function renderPlayerList(data, opts = {}) {
     const clickable = opts.onClickPid ? `data-pid="${pid}"` : '';
     return `<div class="${classes.join(' ')}" ${clickable}>
       <span class="player-name">${p.alive ? '' : '💀'} ${p.name}${pid === MY_PID ? '（你）' : ''}</span>
-      <span>${revealedChips}${hiddenChip}${handCountChip}${equip}${accuse}</span>
+      <span>${roleChip}${revealedChips}${hiddenChip}${handCountChip}${equip}${accuse}</span>
     </div>`;
   }).join('');
 }
@@ -1524,7 +1525,7 @@ function renderCardRules() {
   const roleSection = `
     <div class="card">
       <h3>特殊角色（進階模式）</h3>
-      <div class="muted" style="margin-bottom:6px">房主開局可選擇啟用，每個角色一場最多1張，暗身分只有自己知道</div>
+      <div class="muted" style="margin-bottom:6px">房主開局可選擇啟用，每個角色一場最多1張，角色是公開的，所有玩家都看得到</div>
       ${Object.entries(CHARACTER_DEFS).map(([type, def]) => `
         <div class="player-row" style="align-items:flex-start">
           <span style="min-width:78px"><b>${def.name}</b></span>
