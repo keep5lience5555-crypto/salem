@@ -222,6 +222,7 @@ function normalize(data) {
   data.log = data.log || [];
   data.deck = data.deck || [];
   data.discard = data.discard || [];
+  data.confessQueue = data.confessQueue || [];
   data.mode = data.mode || 'basic';
   data.enabledRoles = data.enabledRoles || [];
   if (data.players) {
@@ -929,36 +930,50 @@ async function resolveNightConfessOutcome(data) {
   const target = data.players[targetPid];
   const protectedBySheriff = data.night.sheriffProtect === targetPid;
   const hasShelter = target.equipment.some(e => e.type === 'shelter');
-  const confessed = !!(data.nightConfessChoices && data.nightConfessChoices[targetPid]);
+  const choices = data.nightConfessChoices || {};
+  const confessed = !!choices[targetPid];
+  // 只要選了自首的人（不論有沒有被女巫選中）都要翻一張自己的身份卡；被警長保護的人不用選擇所以不會在裡面
+  const confessors = alivePids(data).filter(pid => pid !== data.night.sheriffProtect && choices[pid]);
   data.nightConfessChoices = {};
   data.night = null;
   if (protectedBySheriff || hasShelter) {
     logPush(data, `🛡 ${target.name} 受到保護，平安度過夜晚`);
+  } else if (confessed) {
+    logPush(data, `🔪 ${target.name} 在夜裡遭到襲擊，選擇了自首！`);
+  } else {
+    logPush(data, `🔪 ${target.name} 在夜裡遭到襲擊，沒有自首...`);
+    applyDeath(data, targetPid);
+    stripBlueCardsAtTwoPlayers(data);
+  }
+  confessors.filter(pid => pid !== targetPid).forEach(pid => logPush(data, `🙋 ${data.players[pid].name} 選擇了自首`));
+  data.confessQueue = confessors;
+  const winner = checkWin(data);
+  if (winner) {
+    data.state = 'end'; data.winner = winner; data.confessQueue = [];
+  } else if (!startNextConfessFlip(data)) {
     reshuffleAfterNight(data);
     data.state = 'day';
     data.currentTurn = nextAlivePid(data, data.pendingNextTurnFrom);
     data.turnHasPlayed = false;
     data.pendingNextTurnFrom = null;
-  } else if (confessed) {
-    logPush(data, `🔪 ${target.name} 在夜裡遭到襲擊，選擇了自首！`);
-    data.state = 'awaiting_reveal';
-    data.reveal = { targetPid, cause: 'night' };
-  } else {
-    logPush(data, `🔪 ${target.name} 在夜裡遭到襲擊，沒有自首...`);
-    applyDeath(data, targetPid);
-    stripBlueCardsAtTwoPlayers(data);
-    reshuffleAfterNight(data);
-    const winner = checkWin(data);
-    if (winner) {
-      data.state = 'end'; data.winner = winner;
-    } else {
-      data.state = 'day';
-      data.currentTurn = nextAlivePid(data, data.pendingNextTurnFrom);
-      data.turnHasPlayed = false;
-      data.pendingNextTurnFrom = null;
-    }
   }
   await set(roomRef(ROOM_CODE), data);
+}
+// 從自首佇列取出下一位還活著、且還有沒翻開身份卡的玩家，進入他的翻牌階段；佇列空了回傳 false
+function startNextConfessFlip(data) {
+  const queue = data.confessQueue || [];
+  while (queue.length) {
+    const pid = queue.shift();
+    const p = data.players[pid];
+    if (p.alive && p.identityCards.some(c => !c.revealed)) {
+      data.confessQueue = queue;
+      data.state = 'awaiting_reveal';
+      data.reveal = { targetPid: pid, cause: 'night' };
+      return true;
+    }
+  }
+  data.confessQueue = [];
+  return false;
 }
 
 // ── 強制翻牌（審判 / 夜晚自首 / 黑貓） ────────────────────────────────────────
@@ -998,11 +1013,13 @@ async function resolveReveal(cardIndex) {
     data.contagionPicks = {};
     logPush(data, '☣ 接下來所有玩家請選擇從前一位玩家取得一張身份卡');
   } else if (cause === 'night') {
-    reshuffleAfterNight(data);
-    data.state = 'day';
-    data.currentTurn = nextAlivePid(data, data.pendingNextTurnFrom);
-    data.turnHasPlayed = false;
-    data.pendingNextTurnFrom = null;
+    if (!startNextConfessFlip(data)) {
+      reshuffleAfterNight(data);
+      data.state = 'day';
+      data.currentTurn = nextAlivePid(data, data.pendingNextTurnFrom);
+      data.turnHasPlayed = false;
+      data.pendingNextTurnFrom = null;
+    }
   } else {
     // trial：回到觸發審判的玩家手上繼續他的回合（出牌不結束回合）
     data.state = 'day';
@@ -1344,7 +1361,7 @@ function renderNightConfess(data) {
     body = `<div class="muted center">已提交，等待其他人選擇...</div>`;
   } else {
     body = `<h3>🔪 夜晚結果即將公布</h3>
-      <div class="muted">除了被警長保護的人以外，你不知道女巫選了誰。要自首嗎？如果你就是被選中的人：自首可以自己選一張身份卡翻開、免於直接死亡；不自首的話，被選中就會直接死亡。</div>
+      <div class="muted">除了被警長保護的人以外，你不知道女巫選了誰。要自首嗎？只要選擇自首，不管有沒有被選中，都要自己選一張身份卡翻開；如果你就是被選中的人，自首可以免於直接死亡，不自首的話會直接死亡。</div>
       <div class="row" style="margin-top:10px">
         <button class="btn-primary btn-sm" id="btnConfess" style="width:auto">自首</button>
         <button class="btn-danger btn-sm" id="btnDecline" style="width:auto">不自首</button>
