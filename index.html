@@ -347,13 +347,29 @@ function leaveToHome() {
   renderHome();
 }
 
+let lastPopupId = null;
+let popupInitialized = false;
+function handlePopup(data) {
+  const id = data.popup ? data.popup.id : null;
+  if (!popupInitialized) { popupInitialized = true; lastPopupId = id; return; }
+  if (!id || id === lastPopupId) return;
+  lastPopupId = id;
+  const div = document.createElement('div');
+  div.textContent = data.popup.text;
+  div.style.cssText = 'position:fixed;left:50%;top:40%;transform:translate(-50%,-50%) scale(1);z-index:9999;pointer-events:none;font-size:2.6rem;font-weight:800;color:#ffe08a;background:rgba(138,31,31,0.92);padding:22px 34px;border-radius:18px;border:3px solid #ffe08a;text-shadow:0 2px 8px #000;box-shadow:0 10px 40px rgba(0,0,0,0.7);transition:opacity .5s, transform .5s;white-space:nowrap;max-width:94vw;';
+  document.body.appendChild(div);
+  setTimeout(() => { div.style.opacity = '0'; div.style.transform = 'translate(-50%,-60%) scale(1.15)'; }, 2200);
+  setTimeout(() => div.remove(), 2800);
+}
 function subscribe() {
+  popupInitialized = false;
   if (unsub) unsub();
   unsub = onValue(roomRef(ROOM_CODE), (snap) => {
     const data = normalize(snap.val());
     if (!data) { leaveToHome(); return; }
     lastRoomData = data;
     renderState(data);
+    handlePopup(data);
   });
 }
 
@@ -806,6 +822,7 @@ async function playCard(cardId, targets, subTarget, asWitness) {
       case 'detain': {
         target.skipTurns = (target.skipTurns || 0) + 1;
         logPush(data, `${me.name} 拘留了 ${target.name}，將跳過下一回合`);
+        if (target.name === '妓女') data.popup = { id: Date.now() + '_' + Math.random().toString(36).slice(2, 6), text: '阿逼尬尬抓抓' };
         data.discard.push(card);
         break;
       }
