@@ -1051,6 +1051,16 @@ function renderHome() {
 }
 
 // ── Render: Lobby ─────────────────────────────────────────────────────────────
+async function renamePlayer(pid) {
+  if (!lastRoomData || lastRoomData.hostPid !== MY_PID || !lastRoomData.players[pid]) return;
+  const cur = lastRoomData.players[pid].name;
+  const nm = prompt(`把「${cur}」改名為：`, cur);
+  if (nm === null) return;
+  const trimmed = nm.trim().slice(0, 20);
+  if (!trimmed) return alert('名字不能是空的');
+  await set(ref(db, `${ROOT}/${ROOM_CODE}/players/${pid}/name`), trimmed);
+  if (pid === MY_PID) { MY_NAME = trimmed; sessionStorage.setItem('salem_name', MY_NAME); }
+}
 async function setMode(mode) {
   const updates = { mode };
   if (mode === 'basic') updates.enabledRoles = [];
@@ -1094,7 +1104,7 @@ function renderLobby(data) {
     <div class="subtitle center">把房號分享給朋友一起加入</div>
     <div class="card">
       <h2>玩家 (${n}/12)</h2>
-      ${data.turnOrder.map(pid => `<div class="player-row"><span class="player-name">${data.players[pid].name}${pid === data.hostPid ? ' 👑' : ''}${pid === MY_PID ? '（你）' : ''}</span></div>`).join('')}
+      ${data.turnOrder.map(pid => `<div class="player-row"><span class="player-name">${data.players[pid].name}${pid === data.hostPid ? ' 👑' : ''}${pid === MY_PID ? '（你）' : ''}</span>${isHost ? `<button class="btn-secondary btn-sm" data-rename="${pid}">改名</button>` : ''}</div>`).join('')}
     </div>
     ${modeHtml}
     ${isHost
@@ -1107,6 +1117,7 @@ function renderLobby(data) {
   `);
   if (isHost) {
     el('btnStart').onclick = startGame;
+    el('app').querySelectorAll('[data-rename]').forEach(elm => elm.onclick = () => renamePlayer(elm.getAttribute('data-rename')));
     el('btnModeBasic').onclick = () => setMode('basic');
     el('btnModeAdvanced').onclick = () => setMode('advanced');
     if (data.mode === 'advanced') {
